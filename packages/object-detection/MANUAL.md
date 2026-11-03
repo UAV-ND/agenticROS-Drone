@@ -30,7 +30,7 @@ Open a terminal (macOS: **Terminal** app; Windows: **PowerShell**) and run:
 
 ```bash
 git clone -b CV https://github.com/UAV-ND/agenticROS-Drone.git
-cd agenticROS-Drone/CV
+cd agenticROS-Drone/packages/object-detection
 ```
 
 If Git asks you to sign in, use your GitHub account. If you get *"Repository not found"*, you
@@ -39,7 +39,7 @@ don't have access to the UAV-ND organization yet; ask a team admin.
 Already downloaded it earlier? Run `git checkout CV && git pull` inside `agenticROS-Drone` to get the
 newest code and model.
 
-**All commands below are run from inside the `CV` folder.**
+**All commands below are run from inside the `packages/object-detection` folder.**
 
 ---
 
@@ -68,7 +68,7 @@ If PowerShell says *"running scripts is disabled"*, run
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, then try again.
 
 When it works, your prompt starts with `(.venv)`. **Every time you open a new terminal**, go to the
-`CV` folder and run the `activate` line again before using the detector.
+`packages/object-detection` folder and run the `activate` line again before using the detector.
 
 ---
 
@@ -152,7 +152,7 @@ and what data it was trained on; open it in Excel, Numbers or Google Sheets.
 | Window opens but the image is black or frozen | Another app (Zoom, Teams, Photo Booth, a second `detect.py`) is using the camera. Close it. |
 | Very slow (over 200 ms per frame) | Normal on an older computer without a GPU. Apple Silicon Macs and NVIDIA GPUs are used automatically. |
 | `ModuleNotFoundError: No module named 'ultralytics'` | The environment isn't active. Run the `activate` line from step 3. |
-| `No models/dice_v*.pt found` | You are not in the `CV` folder, or `models/` is missing. `cd` into `agenticROS-Drone/CV`. |
+| `No models/dice_v*.pt found` | You are not in the `object-detection` folder, or `models/` is missing. `cd` into `agenticROS-Drone/packages/object-detection`. |
 | Black dice missed more than other colors | This is the current model's weakest color. Save those frames with `s` for the next model version. |
 | Boxes on things that aren't dice | Raise the threshold: `--conf 0.7`. Save those frames with `s` so they can be added to training. |
 | Dice missed or given the wrong color | Save those frames with `s`. They are the most useful images for the next model version. |
