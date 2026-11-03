@@ -1,0 +1,26 @@
+# Settings shared by every script. Edit this file, not the scripts.
+
+# Roboflow project that holds the labeled Arducam images.
+# The ids are in the project URL: app.roboflow.com/<workspace>/<project>
+roboflow:
+  workspace: enochs-workspace-0hm49
+  project: new-camera-rtx-cv
+
+# Class ids in every trained model follow this order.
+# Never reorder or rename; only append new classes at the end.
+classes: [black_dice, blue_dice, yellow_dice, red_dice]
+
+# Arducam AR0234 (USB 3.0, UVC): 1920x1200 at up to 60 fps with MJPG
+camera:
+  source: 0                  # camera index; try 1, 2... if the wrong camera opens
+  width: 1920
+  height: 1200
+  fps: 60
+
+train:
+  base_model: yolo26n.pt     # pretrained starting weights (downloaded automatically)
+  epochs: 100
+  imgsz: 640
+  batch: 16
+  val_fraction: 0.2
+  background_every: 1        # keep every Nth no-dice image (raise if they outnumber labeled images)
