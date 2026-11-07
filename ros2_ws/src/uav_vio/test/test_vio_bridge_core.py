@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation as Rot
 
-from vio_bridge_core import (Bridge, GateParams, Sample, R_LINK_FROM_OPTICAL, inv,
+from uav_vio.vio_bridge_core import (Bridge, GateParams, Sample, R_LINK_FROM_OPTICAL, inv,
                              mount_transform, se3)
 
 DT = 1 / 30

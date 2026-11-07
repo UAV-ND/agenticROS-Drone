@@ -212,3 +212,11 @@ General:
 
 ICD draft (humans only):
 https://claude.ai/artifact/MGyuT1VdGAV9fxYfMMwPZB
+
+## Moved (2026-11-07)
+
+The VIO bridge, its tests, configs and the MAVROS launch now live in the ROS 2 package
+`ros2_ws/src/uav_vio/` (`vio_bridge_core.py`, `vio_mavros_bridge.py`, `bridge_replay_check.py`,
+`config/vio_bridge.yaml`, `config/mavros_params.yaml`, `launch/fc_link.launch.py` (was
+`mavros_telem2.launch.py`)). Run with `ros2 launch uav_vio fc_link.launch.py bridge:=true`.
+The other tools (triage, rs_check, IMU, UART loopback, .parm) are still here.

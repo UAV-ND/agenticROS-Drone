@@ -2,7 +2,7 @@
 """Offline check of the VIO bridge gating on recorded cuVSLAM runs (no live ROS graph needed).
 
   source /opt/ros/jazzy/setup.bash
-  python3 bridge_replay_check.py ~/vio_runs/<run>/odom [more runs...] [--pitch 30] [--csv out.csv]
+  ros2 run uav_vio bridge_replay_check ~/vio_runs/<run>/odom [more runs...] [--pitch 30] [--csv out.csv]
 
 Reads /visual_slam/tracking/odometry from each run's odometry bag, feeds it through
 vio_bridge_core.Bridge exactly as the live node does (minus the clock-age check), and prints
@@ -12,15 +12,13 @@ that distance is the drift).
 """
 import argparse
 import os
-import sys
 
 import numpy as np
 import rosbag2_py
 from nav_msgs.msg import Odometry
 from rclpy.serialization import deserialize_message
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vio_bridge_core import Bridge, GateParams, Sample, mount_transform, se3  # noqa: E402
+from uav_vio.vio_bridge_core import Bridge, GateParams, Sample, mount_transform, se3  # noqa: E402
 from scipy.spatial.transform import Rotation as Rot  # noqa: E402
 
 TOPIC = '/visual_slam/tracking/odometry'

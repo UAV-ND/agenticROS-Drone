@@ -1,4 +1,4 @@
-# UAV-ND VIO -> MAVROS bridge parameters (vio_mavros_bridge.py).
+# UAV-ND VIO -> MAVROS bridge parameters (uav_vio vio_mavros_bridge node).
 # Gate defaults were chosen from recorded cuVSLAM runs (Nov 3-4 2026): normal motion <= 0.5 m/s and
 # <= 50 deg/s, tracking pose variance ~4e-5 m^2 (p99 ~4e-3), occlusion jumps 4-1100 m/s and up to
 # 2300 deg/s with variance 0.03-240 m^2. Re-check max_speed against the AVC task's flight speeds.

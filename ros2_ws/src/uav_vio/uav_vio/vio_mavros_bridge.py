@@ -2,7 +2,7 @@
 """UAV-ND VIO -> MAVROS bridge node (rclpy). Math and gating live in vio_bridge_core.py.
 
   source /opt/ros/jazzy/setup.bash
-  python3 vio_mavros_bridge.py --ros-args --params-file vio_bridge.yaml
+  ros2 run uav_vio vio_mavros_bridge --ros-args --params-file $(ros2 pkg prefix uav_vio)/share/uav_vio/config/vio_bridge.yaml
 
 Subscribes  /visual_slam/tracking/odometry  (cuVSLAM, camera_link in cuVSLAM odom)
             /camera/camera/imu              (only when level_mode = camera_imu, until leveled)
@@ -16,8 +16,6 @@ gaps or high covariance and resumes after `recover_frames` good frames. While it
 falls back to source set 1 (ARK Flow). This node never talks to the flight controller itself.
 """
 import json
-import os
-import sys
 
 import numpy as np
 import rclpy
@@ -28,8 +26,7 @@ from scipy.spatial.transform import Rotation as Rot
 from sensor_msgs.msg import Imu
 from std_msgs.msg import String
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from vio_bridge_core import Bridge, GateParams, Sample, mount_transform, se3  # noqa: E402
+from uav_vio.vio_bridge_core import Bridge, GateParams, Sample, mount_transform, se3  # noqa: E402
 
 
 def stamp_s(st) -> float:
