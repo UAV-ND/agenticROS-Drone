@@ -1,0 +1,89 @@
+# UAV-ND GPS-denied, stage 1: ARK Flow (optical flow + rangefinder) on ArduCopter, Cube Orange
+#
+# Load in Mission Planner: Config > Full Parameter List > Compare Params, review every change, write, reboot.
+# ArduPilot 4.6 renamed some parameters. Both names are included; the one your firmware
+# doesn't have will show as "not found", which is expected.
+#
+# ===== DroneCAN on CAN1 (ARK Flow plugged into CAN1) =====
+CAN_P1_DRIVER,1
+CAN_D1_PROTOCOL,1
+#
+# ===== Optical flow =====
+FLOW_TYPE,6
+# Sensor yaw on the frame, centidegrees. Confirm with the bench roll/pitch test before flight.
+FLOW_ORIENT_YAW,0
+# Sensor offset from the vehicle CG, metres, FRD (x forward, y right, z down). MEASURE these.
+FLOW_POS_X,0
+FLOW_POS_Y,0
+FLOW_POS_Z,0
+#
+# ===== Rangefinder (ARK Flow's lidar) =====
+RNGFND1_TYPE,24
+RNGFND1_ORIENT,25
+# 4.6 and newer, metres
+RNGFND1_MIN,0.08
+RNGFND1_MAX,30
+# 4.5 and older, centimetres
+RNGFND1_MIN_CM,8
+RNGFND1_MAX_CM,3000
+# Same offset as the flow sensor unless measured otherwise
+RNGFND1_POS_X,0
+RNGFND1_POS_Y,0
+RNGFND1_POS_Z,0
+#
+# ===== No GPS on this airframe =====
+# 4.6 and newer
+GPS1_TYPE,0
+# 4.5 and older
+GPS_TYPE,0
+#
+# ===== EKF3, source set 1 = optical flow =====
+AHRS_EKF_TYPE,3
+EK3_ENABLE,1
+EK3_SRC1_POSXY,0
+EK3_SRC1_VELXY,5
+EK3_SRC1_POSZ,1
+EK3_SRC1_VELZ,0
+EK3_SRC1_YAW,1
+# Use the rangefinder for height below 70% of its max range (and at low speed)
+EK3_RNG_USE_HGT,70
+#
+# ===== Failsafe and logging =====
+# EKF failsafe lands the aircraft
+FS_EKF_ACTION,1
+# Log while disarmed so the bench flow test is in the log. Set back to 0 after bench testing.
+LOG_DISARMED,1
+#
+# Optional (ArduPilot 4.4+): in-flight flow calibration on an aux switch.
+# Uncomment and set the channel to a spare switch.
+# RC10_OPTION,158
+#
+# ===== Stage 2: VIO as EKF3 source set 2 =====
+# Leave commented until VIO passes the gates in the ICD.
+#
+# Jetson on TELEM2, MAVLink 2 at 921600. Confirm the port with EE.
+# SERIAL2_PROTOCOL,2
+# SERIAL2_BAUD,921
+# BRD_SER2_RTSCTS,0
+#
+# Visual odometry over MAVLink. The Jetson bridge sends body-frame odometry (tilt applied there).
+# VISO_TYPE,1
+# VISO_ORIENT,0
+# Camera offset from CG, metres, FRD. MEASURE these.
+# VISO_POS_X,0
+# VISO_POS_Y,0
+# VISO_POS_Z,0
+# Set to the measured VIO latency
+# VISO_DELAY_MS,50
+#
+# EKF3 source set 2 = ExternalNav
+# EK3_SRC2_POSXY,6
+# EK3_SRC2_VELXY,6
+# EK3_SRC2_POSZ,1
+# EK3_SRC2_VELZ,0
+# EK3_SRC2_YAW,6
+# Fuse velocity only from the active set, so a bad VIO can't pull on the flow solution
+# EK3_SRC_OPTIONS,0
+#
+# 3-position source switch: low = set 1 (flow), middle = set 2 (VIO). Change 9 to your switch channel.
+# RC9_OPTION,90
