@@ -1,0 +1,27 @@
+# UAV-ND MVP mission parameters (uav_mission mission_node). See mission_core.Params / uav_gnc Limits.
+uav_mission:
+  ros__parameters:
+    takeoff_alt: 3.0          # m ("Climb to 3 m")
+    alt_tol: 0.3
+    vz_tol: 0.2
+    stable_s: 2.0             # "At 3 m, stable 2 s"
+    hover_s: 10.0             # placeholder for transit / sweep
+    preflight_timeout_s: 20.0
+    takeoff_timeout_s: 30.0
+    min_start_battery: 0.5
+    rtl_battery: 0.3
+    time_limit_s: 600.0
+    failsafe_hold_s: 3.0      # "Hold on flow, then land"
+    mode_grace_s: 3.0
+    require_vio: false        # true on the real drone once VIO flies on set 2
+
+    # uav_gnc limits (enforced on every command)
+    max_alt: 5.0              # m above ground at arming
+    min_alt: 0.5
+    max_radius: 20.0          # m from takeoff point
+
+    link_timeout_s: 3.0
+    pose_timeout_s: 0.5
+    vio_timeout_s: 0.5
+    retry_s: 1.5
+    source_switch_channel: 10

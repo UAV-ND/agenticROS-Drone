@@ -79,3 +79,13 @@ def test_bad_bridge_json_ignored():
     s = FcStatus()
     s.on_bridge_status('not json', 1.0)
     assert s.bridge_state is None and s.t_bridge is None
+
+
+def test_commanded_switch_updates_source_and_clears_warning():
+    s = healthy(10.0)
+    s.on_statustext('Using EKF Source Set 2')
+    s.on_bridge_status(json.dumps({'state': 'HOLD'}), 10.0)
+    assert any('source set 2' in w for w in s.warnings(10.5))
+    s.on_source_command(1)                  # FC accepted MAV_CMD_SET_EKF_SOURCE_SET 1 (silently)
+    assert s.effective_source_set() == 1
+    assert not any('source set 2' in w for w in s.warnings(10.5))

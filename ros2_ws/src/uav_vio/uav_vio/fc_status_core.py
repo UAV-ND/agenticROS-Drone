@@ -8,7 +8,10 @@ EKF source set, two independent signals:
     low (< 1200 us) -> set 1, middle -> set 2, high (> 1800 us) -> set 3.
   * STATUSTEXT "Using EKF Source Set N", which the Cube prints when it actually switches.
     This also catches switches that did not come from the RC (e.g. MAV_CMD_SET_EKF_SOURCE_SET).
-The STATUSTEXT value is authoritative once seen; the RC value is shown next to it.
+  * A MAV_CMD_SET_EKF_SOURCE_SET the FC accepted (on_source_command). ArduPilot 4.6 switches
+    SILENTLY on that command (GCS_Common.cpp handle_command_set_ekf_source_set): only the RC switch
+    path prints "Using EKF Source Set N". So whoever sends the command must report it.
+The latest FC-side value (STATUSTEXT or accepted command) is authoritative; RC is shown next to it.
 """
 import json
 import re
@@ -67,6 +70,11 @@ class FcStatus:
         if 'using external nav data' in (text or ''):
             self.ext_nav_in_use = True
         self.recent_text = (self.recent_text + [text])[-keep:]
+
+    def on_source_command(self, source_set: int):
+        """The FC accepted MAV_CMD_SET_EKF_SOURCE_SET (it prints nothing in that case)."""
+        self.fc_source_set = int(source_set)
+        self.ext_nav_in_use = False
 
     def on_bridge_status(self, raw_json: str, now: float):
         try:

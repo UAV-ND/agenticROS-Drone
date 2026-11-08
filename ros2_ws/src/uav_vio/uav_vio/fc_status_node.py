@@ -5,6 +5,8 @@ Subscribes  /mavros/state               (mavros_msgs/State: connected, armed, mo
             /mavros/rc/in               (mavros_msgs/RCIn: ch10 = EKF source switch, RC10_OPTION 90)
             /mavros/statustext/recv     (mavros_msgs/StatusText: "Using EKF Source Set N", ...)
             /vio_bridge/status          (std_msgs/String JSON from vio_mavros_bridge)
+            /uav/ekf_source_cmd         (std_msgs/UInt8: source set the mission switched to by
+                                         command; ArduPilot does not announce those switches)
 Publishes   /uav/fc_status              (std_msgs/String JSON, 1 Hz)
 
 Logs a warning whenever the warning set changes, e.g. EKF on source set 2 while the bridge is in
@@ -16,7 +18,7 @@ import rclpy
 from mavros_msgs.msg import RCIn, State, StatusText
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from std_msgs.msg import String
+from std_msgs.msg import String, UInt8
 
 from uav_vio.fc_status_core import FcStatus, source_set_from_rc
 
@@ -35,6 +37,7 @@ class FcStatusNode(Node):
         self.create_subscription(RCIn, '/mavros/rc/in', self.on_rc, be)
         self.create_subscription(StatusText, '/mavros/statustext/recv', self.on_text, be)
         self.create_subscription(String, '/vio_bridge/status', self.on_bridge, 10)
+        self.create_subscription(UInt8, '/uav/ekf_source_cmd', self.on_source_cmd, 10)
         self.pub = self.create_publisher(String, '/uav/fc_status', 10)
         self.create_timer(1.0, self.tick)
 
@@ -54,6 +57,10 @@ class FcStatusNode(Node):
         self.s.on_statustext(m.text)
         if 'EKF' in m.text or 'VisOdom' in m.text:
             self.get_logger().info(f'FC: {m.text}')
+
+    def on_source_cmd(self, m: UInt8):
+        self.s.on_source_command(m.data)
+        self.get_logger().info(f'EKF source set {m.data} commanded by mission (FC accepted)')
 
     def on_bridge(self, m: String):
         self.s.on_bridge_status(m.data, self.now())
