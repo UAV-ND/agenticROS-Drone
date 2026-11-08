@@ -1,8 +1,9 @@
 """Mission state machine tests against a crude ArduCopter + downward-camera stand-in (no ROS)."""
 import math
 
-from uav_mission.mission_core import (ABORTED, CENTER, DONE, FAILSAFE, IDLE, LAND, PILOT, PREFLIGHT, RTL,
-                                      SWEEP, TAKEOFF, TRANSIT, Cmd, CommandGate, Inputs, Mission, Params)
+from uav_mission.mission_core import (ABORTED, CENTER, DONE, FAILSAFE, HOVER, IDLE, LAND, PATH, PILOT,
+                                      PREFLIGHT, RTL, SWEEP, TAKEOFF, TRANSIT, Cmd, CommandGate, Inputs,
+                                      Mission, Params)
 
 DT = 0.1
 FULL = [PREFLIGHT, TAKEOFF, TRANSIT, SWEEP]
@@ -124,13 +125,35 @@ def test_full_mission_finds_and_centers_on_die():
     assert 'velocity' in kinds
 
 
+def to_takeoff_frame(fc, x, y):
+    c, s = math.cos(fc.yaw), math.sin(fc.yaw)          # fake yaw is constant = yaw at arming
+    return c * x + s * y, -s * x + c * y
+
+
 def test_no_target_sweeps_whole_area_then_rtl():
     m, fc = started(die=None)
-    ys = []
-    states = run(m, fc, 200, hook=lambda m, fc: ys.append(fc.y) if m.state == SWEEP else None)
+    lefts, fwds = [], []
+
+    def rec(m, fc):
+        if m.state == SWEEP:
+            f, l = to_takeoff_frame(fc, fc.x, fc.y)
+            fwds.append(f)
+            lefts.append(l)
+    states = run(m, fc, 200, hook=rec)
     assert states == FULL + [RTL, DONE]
     p = Params()
-    assert min(ys) < p.area_y_min + 0.2 and max(ys) > p.area_y_max - 0.2   # every lane flown
+    assert min(lefts) < p.area_y_min + 0.2 and max(lefts) > p.area_y_max - 0.2   # every lane flown
+    assert min(fwds) < p.area_x_min + 0.2 and max(fwds) > p.area_x_max - 0.2    # full lane length
+
+
+def test_sweep_without_detector_returns_to_start_and_lands():
+    p = Params(sweep_end='return', takeoff_alt=1.5, area_x_min=0.5, area_x_max=2.0, area_y_min=0.0,
+               area_y_max=1.0, lane_spacing=0.5, hover_s=3.0)
+    m, fc = started(p, die=None)
+    states = run(m, fc, 150)
+    assert states == [PREFLIGHT, TAKEOFF, TRANSIT, SWEEP, PATH, HOVER, LAND, DONE]
+    assert 'returning to start' in m.events[4][3]
+    assert math.hypot(fc.x, fc.y) < 0.3 and RTL not in states
 
 
 def test_transit_and_sweep_respect_speed():
@@ -348,3 +371,39 @@ def test_command_gate_dedupes_oneshots_and_streams_setpoints():
     assert g.filter([c], 1.6) == [c]
     h = Cmd('hold', (1.0, 2.0, 3.0, 0.0))
     assert g.filter([h], 2.0) == [h] and g.filter([h], 2.1) == [h]
+
+
+
+# ---- simple profiles for the first real cuVSLAM flights -----------------------------------
+def test_hover_profile_holds_takeoff_point_then_lands():
+    m, fc = started(Params(profile='hover', takeoff_alt=1.5, hover_s=8.0), die=None)
+    xy = []
+    states = run(m, fc, 60, hook=lambda m, fc: xy.append((fc.x, fc.y, fc.z)) if m.state == HOVER else None)
+    assert states == [PREFLIGHT, TAKEOFF, HOVER, LAND, DONE]
+    assert all(math.hypot(x, y) < 0.05 and abs(z - 1.5) < 0.2 for x, y, z in xy)
+    assert 'velocity' not in [c.kind for c in fc.sent]
+
+
+def test_square_profile_flies_square_in_takeoff_frame_and_returns():
+    m, fc = started(Params(profile='square', takeoff_alt=1.5, square_side=1.0, hover_s=3.0), die=None)
+    pts = []
+    states = run(m, fc, 90, hook=lambda m, fc: pts.append((fc.x, fc.y)) if m.state == PATH else None)
+    assert states == [PREFLIGHT, TAKEOFF, PATH, HOVER, LAND, DONE]
+    # the far corner in the takeoff frame (yaw 0.3 rad): forward 1 m, left 1 m
+    c, s = math.cos(0.3), math.sin(0.3)
+    corner = (c * 1 - s * 1, s * 1 + c * 1)
+    assert min(math.dist(p, corner) for p in pts) < 0.15
+    assert math.hypot(fc.x, fc.y) < 0.3                  # landed back near the start
+
+
+def test_unknown_profile_refused():
+    m = Mission(p=Params(profile='circle'))
+    ok, msg = m.start(FakeCopter().inputs())
+    assert not ok and 'unknown profile' in msg
+
+
+def test_vio_loss_in_hover_profile_failsafe():
+    m, fc = started(Params(profile='hover', takeoff_alt=1.5, hover_s=30.0), die=None)
+    fc.source_set = 2
+    states = run(m, fc, 60, hook=when(HOVER)(lambda m, fc: setattr(fc, 'vio_ok', False)))
+    assert states[-3:] == [FAILSAFE, LAND, DONE]

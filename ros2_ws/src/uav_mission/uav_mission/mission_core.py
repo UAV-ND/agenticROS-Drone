@@ -6,6 +6,13 @@ the commands the mission *wants* right now. `CommandGate` turns that wish list i
 (one-shot commands sent on change and re-sent every `retry_s` while still wanted; setpoints
 streamed every tick), so a lost reply just means a retry.
 
+Profiles (param `profile`), chosen after TAKEOFF:
+  hover   TAKEOFF -> HOVER (hold the takeoff point for hover_s) -> LAND -> DONE
+  square  TAKEOFF -> PATH (square of square_side m, relative to the takeoff pose; back to start)
+          -> HOVER (hover_s) -> LAND -> DONE
+  sweep   the full MVP mission below. With no detector running nothing is ever seen, so it just
+          flies every lane; sweep_end 'return' then flies back to the start and lands there
+          (PATH -> HOVER -> LAND) instead of the diagram's RTL.
 States (mvp/uav_simplified_mission_state_machine_v3.svg):
   IDLE -> PREFLIGHT -> TAKEOFF --3 m, stable 2 s--> TRANSIT --at search area--> SWEEP
   SWEEP --target seen 5 frames--> CENTER --centered 5 s--> LAND -> DONE
@@ -16,8 +23,10 @@ Global rules for airborne states:
   low battery or mission time limit                         -> RTL
   pilot changes mode on the RC                              -> PILOT (mission stops commanding)
 
-Geometry is local ENU metres relative to the EKF origin; the search area is a placeholder rectangle
-until the competition field is known.
+Geometry: the square and the search area are given in the TAKEOFF FRAME (metres forward / left of
+where the drone armed, along its heading then), converted to local ENU here. Under VIO the EKF's
+"east/north" are really the camera's start pose, so a takeoff-relative frame is the only intuitive
+one. The search area is a placeholder rectangle until the competition field is known.
 """
 import math
 from dataclasses import dataclass, field
@@ -25,11 +34,12 @@ from typing import Optional
 
 from uav_gnc.guidance import CenterController, PathFollower, PidGains, sweep_path
 
-(IDLE, PREFLIGHT, TAKEOFF, TRANSIT, SWEEP, CENTER, LAND, RTL, FAILSAFE, DONE, PILOT, ABORTED) = (
-    'IDLE', 'PREFLIGHT', 'TAKEOFF', 'TRANSIT', 'SWEEP', 'CENTER', 'LAND', 'RTL', 'FAILSAFE', 'DONE',
-    'PILOT', 'ABORTED')
+(IDLE, PREFLIGHT, TAKEOFF, HOVER, PATH, TRANSIT, SWEEP, CENTER, LAND, RTL, FAILSAFE, DONE, PILOT,
+ ABORTED) = ('IDLE', 'PREFLIGHT', 'TAKEOFF', 'HOVER', 'PATH', 'TRANSIT', 'SWEEP', 'CENTER', 'LAND',
+             'RTL', 'FAILSAFE', 'DONE', 'PILOT', 'ABORTED')
 TERMINAL = {DONE, PILOT, ABORTED}
-GUIDED_FLIGHT = {TAKEOFF, TRANSIT, SWEEP, CENTER}   # mission flies these in GUIDED
+GUIDED_FLIGHT = {TAKEOFF, HOVER, PATH, TRANSIT, SWEEP, CENTER}   # mission flies these in GUIDED
+PROFILES = ('hover', 'square', 'sweep')
 AIRBORNE = GUIDED_FLIGHT | {LAND, RTL, FAILSAFE}
 
 # Flight modes the mission itself puts the FC in, per state. Anything else (after a grace period)
@@ -43,6 +53,10 @@ FLOW_SOURCE_SET = 1
 
 @dataclass
 class Params:
+    profile: str = 'sweep'            # 'hover' | 'square' | 'sweep' (see module docstring)
+    hover_s: float = 10.0             # HOVER duration (hover / square profiles)
+    square_side: float = 1.0          # m; + = forward then left of the takeoff pose, - = mirrored
+    path_speed: float = 0.3           # m/s along the square
     takeoff_alt: float = 3.0          # m above the ground height at arming (also sweep altitude)
     alt_tol: float = 0.3              # m
     vz_tol: float = 0.2               # m/s
@@ -56,7 +70,8 @@ class Params:
     failsafe_hold_s: float = 3.0      # "Hold on flow, then land"
     mode_grace_s: float = 3.0         # time allowed for a mode change we asked for to show up
     require_vio: bool = False         # refuse to start unless VIO is healthy and EKF is on set 2
-    # search area (placeholder until the field is known), local ENU m relative to the EKF origin
+    # search area (placeholder until the field is known): TAKEOFF FRAME, x forward / y left, m
+    sweep_end: str = 'rtl'            # 'rtl' (diagram) | 'return' (fly back to start, land there)
     area_x_min: float = 2.0
     area_x_max: float = 6.0
     area_y_min: float = 2.0
@@ -122,7 +137,8 @@ class Mission:
     t_takeoff: Optional[float] = None
     ground_z: Optional[float] = None
     yaw_hold: float = 0.0             # heading kept for the whole flight (yaw at arming)
-    hold: Optional[tuple] = None      # (x, y, z, yaw) for FAILSAFE
+    hold: Optional[tuple] = None      # (x, y, z, yaw) for FAILSAFE / HOVER
+    home: Optional[tuple] = None      # (x, y) at arming
     t_stable: Optional[float] = None
     abort_requested: bool = False
     follower: Optional[PathFollower] = None
@@ -142,6 +158,10 @@ class Mission:
             probs.append('already armed')
         if not i.pose_ok:
             probs.append('no EKF local position')
+        if p.profile not in PROFILES:
+            probs.append(f'unknown profile {p.profile!r} (use one of {PROFILES})')
+        if p.sweep_end not in ('rtl', 'return'):
+            probs.append(f"unknown sweep_end {p.sweep_end!r} (use 'rtl' or 'return')")
         if i.battery is not None and i.battery < p.min_start_battery:
             probs.append(f'battery {i.battery:.0%} < {p.min_start_battery:.0%}')
         if p.require_vio and not (i.vio_ok and i.source_set == VIO_SOURCE_SET):
@@ -218,7 +238,7 @@ class Mission:
             return [Cmd('mode', ('GUIDED',))]
         if not i.armed:
             return [Cmd('arm')]
-        self.ground_z, self.t_takeoff, self.yaw_hold = i.z, i.now, i.yaw
+        self.ground_z, self.t_takeoff, self.yaw_hold, self.home = i.z, i.now, i.yaw, (i.x, i.y)
         self._go(TAKEOFF, i.now, 'armed in GUIDED')
         return self._takeoff(i, dt)
 
@@ -231,6 +251,16 @@ class Mission:
         if abs(i.z - target) < p.alt_tol and abs(i.vz) < p.vz_tol:
             self.t_stable = self.t_stable if self.t_stable is not None else i.now
             if i.now - self.t_stable >= p.stable_s:
+                why = f'at {p.takeoff_alt:.1f} m, stable {p.stable_s:.0f} s'
+                if p.profile == 'hover':
+                    self._go(HOVER, i.now, why)
+                    self.hold = (self.home[0], self.home[1], target, self.yaw_hold)
+                    return self._hover(i, dt)
+                if p.profile == 'square':
+                    self.follower = PathFollower([(i.x, i.y, target)] + self._square_points(target),
+                                                 p.path_speed, p.max_lead, p.wp_tol)
+                    self._go(PATH, i.now, why)
+                    return self._path(i, dt)
                 start = self._sweep_points()[0]
                 self.follower = PathFollower([(i.x, i.y, target), start], p.transit_speed,
                                              p.max_lead, p.wp_tol)
@@ -244,6 +274,20 @@ class Mission:
         if i.z - self.ground_z < 0.3 and (t_in < 0.5 or t_in > p.takeoff_retry_s):
             return [Cmd('takeoff', (p.takeoff_alt,))]
         return []
+
+    def _hover(self, i: Inputs, dt) -> list:
+        if i.now - self.t_state >= self.p.hover_s:
+            self._go(LAND, i.now, f'hover {self.p.hover_s:.0f} s done')
+            return self._land(i, dt)
+        return [Cmd('hold', self.hold)]
+
+    def _path(self, i: Inputs, dt) -> list:
+        pos = (i.x, i.y, i.z)
+        if self.follower.done(pos):
+            self.hold = (*self.follower.pts[-1], self.yaw_hold)
+            self._go(HOVER, i.now, 'path done, back at start')
+            return self._hover(i, dt)
+        return [self._carrot_cmd(pos, dt)]
 
     def _transit(self, i: Inputs, dt) -> list:
         pos = (i.x, i.y, i.z)
@@ -265,6 +309,12 @@ class Mission:
             self._go(CENTER, i.now, f'target seen {i.det_frames} frames')
             return self._center(i, dt)
         if self.follower.done(pos):
+            if p.sweep_end == 'return':
+                z = self.ground_z + p.takeoff_alt
+                self.follower = PathFollower([pos, (self.home[0], self.home[1], z)], p.transit_speed,
+                                             p.max_lead, p.wp_tol)
+                self._go(PATH, i.now, 'sweep done, no target: returning to start')
+                return self._path(i, dt)
             self._go(RTL, i.now, 'sweep done, no target')
             return self._rtl(i, dt)
         return [self._carrot_cmd(pos, dt)]
@@ -319,8 +369,18 @@ class Mission:
     # ---- helpers ------------------------------------------------------------------------------
     def _sweep_points(self):
         p = self.p
-        return sweep_path(p.area_x_min, p.area_x_max, p.area_y_min, p.area_y_max, p.lane_spacing,
+        body = sweep_path(p.area_x_min, p.area_x_max, p.area_y_min, p.area_y_max, p.lane_spacing,
                           self.ground_z + p.takeoff_alt)
+        return [self._takeoff_to_local(f, l, z) for f, l, z in body]
+
+    def _takeoff_to_local(self, fwd, left, z):
+        c, s = math.cos(self.yaw_hold), math.sin(self.yaw_hold)
+        return (self.home[0] + c * fwd - s * left, self.home[1] + s * fwd + c * left, z)
+
+    def _square_points(self, z):
+        """Square in the takeoff pose's frame: forward s, left s, back, right; ends at the start."""
+        s = self.p.square_side
+        return [self._takeoff_to_local(f, l, z) for f, l in [(s, 0.0), (s, s), (0.0, s), (0.0, 0.0)]]
 
     def _carrot_cmd(self, pos, dt) -> Cmd:
         x, y, z = self.follower.step(pos, dt)
@@ -347,7 +407,7 @@ class Mission:
             'in_state_s': round(now - self.t_state, 1) if self.state != IDLE else None,
             'mission_s': round(now - self.t_takeoff, 1) if self.t_takeoff is not None else None,
         }
-        if self.follower is not None and self.state in (TRANSIT, SWEEP):
+        if self.follower is not None and self.state in (PATH, TRANSIT, SWEEP):
             d['carrot'] = [round(v, 2) for v in self.follower.carrot]
             d['path_point'] = f'{self.follower.seg + 1}/{len(self.follower.pts)}'
         if self.state == CENTER and self.center is not None and self.center.offset() is not None:

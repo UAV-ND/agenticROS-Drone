@@ -1,6 +1,11 @@
 # UAV-ND MVP mission parameters (uav_mission mission_node). See mission_core.Params / uav_gnc Limits.
 uav_mission:
   ros__parameters:
+    profile: sweep            # hover | square | sweep
+    hover_s: 10.0             # hover / square profiles
+    square_side: 1.0          # m, takeoff frame (forward then left)
+    path_speed: 0.3
+    sweep_end: rtl            # rtl (diagram) | return (fly back to start, land)
     takeoff_alt: 3.0          # m ("Climb to 3 m")
     alt_tol: 0.3
     vz_tol: 0.2
@@ -14,7 +19,7 @@ uav_mission:
     mode_grace_s: 3.0
     require_vio: false        # true on the real drone once VIO flies on set 2
 
-    # search area: PLACEHOLDER until the field is known (local ENU m from the takeoff point)
+    # search area: PLACEHOLDER until the field is known (TAKEOFF FRAME: x forward, y left, m)
     area_x_min: 2.0
     area_x_max: 6.0
     area_y_min: 2.0
