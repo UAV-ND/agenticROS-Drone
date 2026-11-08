@@ -8,7 +8,9 @@ Operator / AI-agent interface (the agent only starts, aborts and reads status):
 
 Inputs: /mavros/state, /mavros/local_position/{pose,velocity_local}, /mavros/battery,
 /mavros/statustext/recv + /mavros/rc/in (EKF source set), /mavros/odometry/out (VIO bridge output;
-fresh = VIO healthy). Needs MAVROS launched with command plugins (launch/mission.launch.py).
+fresh = VIO healthy), /uav/die/target (geometry_msgs/PointStamped: target offset from the drone in
+body FLU metres, x forward, y left, z = confidence; from the die detector, or fake_die in SITL).
+Needs MAVROS launched with command plugins (launch/mission.launch.py).
 The RC pilot can always take over by changing mode; the mission then stops commanding (PILOT).
 """
 import json
@@ -16,7 +18,7 @@ import math
 from collections import deque
 
 import rclpy
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PointStamped, PoseStamped, TwistStamped
 from mavros_msgs.msg import RCIn, State, StatusText
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
@@ -59,6 +61,8 @@ class MissionNode(Node):
         self.vz = 0.0
         self.battery = None
         self.n_events = 0
+        self.det_seq, self.det_frames, self.t_det, self.det = 0, 0, None, (0.0, 0.0)
+        self.det_gap_s = float(P('det_gap_s', 0.3).value)   # a longer gap restarts the frame count
         self.fc_errors = deque(maxlen=3)   # recent FC warnings/errors, e.g. 'Arm: Throttle (RC3) ...'
 
         be = qos_profile_sensor_data
@@ -69,6 +73,7 @@ class MissionNode(Node):
         self.create_subscription(StatusText, '/mavros/statustext/recv', self.on_text, be)
         self.create_subscription(RCIn, '/mavros/rc/in', self.on_rc, be)
         self.create_subscription(Odometry, '/mavros/odometry/out', self.on_vio, be)
+        self.create_subscription(PointStamped, '/uav/die/target', self.on_target, 10)
         self.create_service(Trigger, '/uav/mission/start', self.srv_start)
         self.create_service(Trigger, '/uav/mission/abort', self.srv_abort)
         self.pub = self.create_publisher(String, '/uav/mission/state', 10)
@@ -108,6 +113,13 @@ class MissionNode(Node):
         self.pub_src.publish(UInt8(data=int(source_set)))
         self.get_logger().warn(f'EKF switched to source set {source_set} by mission command')
 
+    def on_target(self, m):
+        now = self.now()
+        consecutive = self.t_det is not None and now - self.t_det <= self.det_gap_s
+        self.det_frames = self.det_frames + 1 if consecutive else 1
+        self.det_seq += 1
+        self.t_det, self.det = now, (m.point.x, m.point.y)
+
     def on_vio(self, _m):
         self.t_vio = self.now()
 
@@ -121,7 +133,9 @@ class MissionNode(Node):
         return Inputs(now=now, link_ok=link_ok, armed=bool(st and st.armed), mode=st.mode if st else '',
                       pose_ok=pose_ok, x=x, y=y, z=z, yaw=yaw, vz=self.vz, battery=self.battery,
                       vio_ok=self.t_vio is not None and now - self.t_vio <= self.vio_timeout,
-                      source_set=self.fcs.effective_source_set())
+                      source_set=self.fcs.effective_source_set(), det_seq=self.det_seq,
+                      det_frames=self.det_frames, t_det=self.t_det, det_fwd=self.det[0],
+                      det_left=self.det[1])
 
     # ---- operator services --------------------------------------------------------------------
     def srv_start(self, _req, res):
@@ -147,6 +161,7 @@ class MissionNode(Node):
     # ---- main loop ----------------------------------------------------------------------------
     def tick(self):
         i = self.inputs()
+        self.fc.pos = (i.x, i.y, i.z)
         wanted = self.m.step(i)
         if self.m.ground_z is not None and self.fc.origin is None:
             self.fc.set_origin(i.x, i.y, self.m.ground_z)
@@ -166,6 +181,7 @@ class MissionNode(Node):
         d = self.m.summary(now)
         d.update({'link_ok': i.link_ok, 'armed': i.armed, 'mode': i.mode, 'pose_ok': i.pose_ok,
                   'alt': round(i.z - self.m.ground_z, 2) if self.m.ground_z is not None else None,
+                  'pos': [round(i.x, 2), round(i.y, 2)],
                   'battery': i.battery, 'vio_ok': i.vio_ok, 'source_set': i.source_set,
                   'fc_errors': list(self.fc_errors),
                   'preflight_problems': self.m.preflight_problems(i) if self.m.state == 'IDLE' else []})

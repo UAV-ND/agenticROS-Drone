@@ -20,5 +20,6 @@ setup(
     description='MVP mission state machine',
     license='Apache-2.0',
     tests_require=['pytest'],
-    entry_points={'console_scripts': ['mission_node = uav_mission.mission_node:main']},
+    entry_points={'console_scripts': ['mission_node = uav_mission.mission_node:main',
+                                    'fake_die = uav_mission.fake_die:main']},
 )

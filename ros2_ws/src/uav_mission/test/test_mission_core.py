@@ -1,51 +1,89 @@
-"""Mission state machine tests against a crude ArduCopter stand-in (no ROS)."""
-from uav_mission.mission_core import (ABORTED, DONE, FAILSAFE, HOVER, IDLE, LAND, PILOT, PREFLIGHT, RTL,
-                                      TAKEOFF, Cmd, CommandGate, Inputs, Mission, Params)
+"""Mission state machine tests against a crude ArduCopter + downward-camera stand-in (no ROS)."""
+import math
+
+from uav_mission.mission_core import (ABORTED, CENTER, DONE, FAILSAFE, IDLE, LAND, PILOT, PREFLIGHT, RTL,
+                                      SWEEP, TAKEOFF, TRANSIT, Cmd, CommandGate, Inputs, Mission, Params)
 
 DT = 0.1
+FULL = [PREFLIGHT, TAKEOFF, TRANSIT, SWEEP]
 
 
 class FakeCopter:
-    """Just enough ArduCopter behaviour: modes, arming, GUIDED takeoff climb, LAND/RTL descent."""
+    """Modes, arming, GUIDED takeoff, position / velocity targets, LAND/RTL descent, die camera."""
 
-    def __init__(self):
-        self.t, self.mode, self.armed, self.z, self.vz = 0.0, 'STABILIZE', False, 0.0, 0.0
+    def __init__(self, die=None):
+        self.t, self.mode, self.armed = 0.0, 'STABILIZE', False
+        self.x = self.y = self.z = self.vz = 0.0
+        self.yaw = 0.3                              # not aligned with the axes on purpose
         self.link_ok, self.battery, self.vio_ok, self.source_set = True, 0.9, True, 1
-        self.takeoff_target = None
+        self.takeoff_target = self.pos_target = self.vel = None
+        self.t_vel = -1e9
+        self.die, self.camera_on = die, True        # die (x, y) or None
+        self.det_seq, self.det_frames, self.t_det, self.det = 0, 0, None, (0.0, 0.0)
         self.sent = []
 
     def apply(self, cmds):
         for c in cmds:
             self.sent.append(c)
-            if c.kind == 'mode' and self.link_ok:
+            if not self.link_ok:
+                continue
+            if c.kind == 'mode':
                 self.mode = c.args[0]
-            elif c.kind == 'arm' and self.link_ok and self.mode == 'GUIDED':
+                self.pos_target = self.vel = None
+            elif c.kind == 'arm' and self.mode == 'GUIDED':
                 self.armed = True
             elif c.kind == 'takeoff' and self.armed and self.mode == 'GUIDED':
                 self.takeoff_target = c.args[0]
-            elif c.kind == 'ekf_source' and self.link_ok:
+            elif c.kind == 'hold' and self.mode == 'GUIDED':
+                self.pos_target, self.vel = c.args[:3], None
+            elif c.kind == 'velocity' and self.mode == 'GUIDED':
+                self.vel, self.t_vel, self.pos_target = c.args[:3], self.t, None
+            elif c.kind == 'ekf_source':
                 self.source_set = c.args[0]
 
     def physics(self):
         self.t += DT
-        target = None
-        if self.mode == 'GUIDED' and self.takeoff_target is not None:
-            target = self.takeoff_target
+        vx = vy = 0.0
+        vz = None
+        if self.armed and self.mode == 'GUIDED':
+            if self.vel is not None and self.t - self.t_vel < 3.0:
+                vx, vy, vz = self.vel
+            elif self.pos_target is not None:
+                tx, ty, tz = self.pos_target
+                vx, vy = [max(-2.0, min(2.0, 1.5 * e)) for e in (tx - self.x, ty - self.y)]
+                vz = max(-1.0, min(1.0, 1.5 * (tz - self.z)))
+            elif self.takeoff_target is not None:
+                vz = max(-1.0, min(1.0, 1.5 * (self.takeoff_target - self.z)))
         elif self.mode in ('LAND', 'RTL') and self.armed:
-            target = 0.0
-        if target is not None:
-            err = target - self.z
-            self.vz = max(-1.0, min(1.0, err * 1.5))
-            if abs(err) < 0.02:
-                self.vz = 0.0
-            self.z += self.vz * DT
+            vz = -0.5 if self.z > 0.05 else 0.0
+            if self.mode == 'RTL':
+                vx, vy = [max(-2.0, min(2.0, -1.5 * e)) for e in (self.x, self.y)]
+        self.vz = vz or 0.0
+        self.x, self.y, self.z = self.x + vx * DT, self.y + vy * DT, self.z + self.vz * DT
         if self.mode in ('LAND', 'RTL') and self.z <= 0.05 and self.armed:
             self.armed, self.z, self.vz, self.takeoff_target = False, 0.0, 0.0, None
+        self.camera()
+
+    def camera(self):
+        """Downward camera, half FOV 30 deg, detections in body FLU like fake_die."""
+        seen = False
+        if self.die is not None and self.camera_on and self.z > 1.0:
+            dx, dy = self.die[0] - self.x, self.die[1] - self.y
+            c, s = math.cos(self.yaw), math.sin(self.yaw)
+            fwd, left = c * dx + s * dy, -s * dx + c * dy
+            half = self.z * math.tan(math.radians(30))
+            if abs(fwd) <= half and abs(left) <= half:
+                seen = True
+                self.det_frames = self.det_frames + 1 if (self.t_det is not None and self.t - self.t_det <= 0.3) else 1
+                self.det_seq += 1
+                self.t_det, self.det = self.t, (fwd, left)
 
     def inputs(self):
         return Inputs(now=self.t, link_ok=self.link_ok, armed=self.armed, mode=self.mode, pose_ok=True,
-                      z=self.z, vz=self.vz, battery=self.battery, vio_ok=self.vio_ok,
-                      source_set=self.source_set)
+                      x=self.x, y=self.y, z=self.z, yaw=self.yaw, vz=self.vz, battery=self.battery,
+                      vio_ok=self.vio_ok, source_set=self.source_set, det_seq=self.det_seq,
+                      det_frames=self.det_frames, t_det=self.t_det, det_fwd=self.det[0],
+                      det_left=self.det[1])
 
 
 def run(m, fc, seconds, hook=None, gate=None):
@@ -58,129 +96,186 @@ def run(m, fc, seconds, hook=None, gate=None):
     return [e[2] for e in m.events]
 
 
-def started(params=None):
-    m, fc = Mission(p=params or Params(hover_s=5.0)), FakeCopter()
+def started(params=None, die=(4.0, 4.0)):
+    m, fc = Mission(p=params or Params()), FakeCopter(die)
     ok, msg = m.start(fc.inputs())
     assert ok, msg
     return m, fc
 
 
-def test_nominal_flight():
+def when(state):
+    """Hook helper: run f(m, fc) on every tick while the mission is in `state`."""
+    def deco(f):
+        return lambda m, fc: f(m, fc) if m.state == state else None
+    return deco
+
+
+# ---- nominal paths ---------------------------------------------------------------------------
+def test_full_mission_finds_and_centers_on_die():
     m, fc = started()
-    states = run(m, fc, 60)
-    assert states == [PREFLIGHT, TAKEOFF, HOVER, LAND, DONE]
-    assert not fc.armed and fc.z == 0.0
+    states = run(m, fc, 200)
+    assert states == FULL + [CENTER, LAND, DONE]
+    land_t = next(e[0] for e in m.events if e[2] == LAND)
+    assert not fc.armed
+    # landed over the die (LAND descends straight down in the fake)
+    assert math.hypot(fc.x - 4.0, fc.y - 4.0) < 0.25, (fc.x, fc.y, land_t)
     kinds = [c.kind for c in fc.sent]
     assert kinds.index('mode') < kinds.index('arm') < kinds.index('takeoff') < kinds.index('hold')
-    assert m.hold[2] == m.ground_z + 3.0
+    assert 'velocity' in kinds
 
 
-def test_hover_only_after_stable_2s():
+def test_no_target_sweeps_whole_area_then_rtl():
+    m, fc = started(die=None)
+    ys = []
+    states = run(m, fc, 200, hook=lambda m, fc: ys.append(fc.y) if m.state == SWEEP else None)
+    assert states == FULL + [RTL, DONE]
+    p = Params()
+    assert min(ys) < p.area_y_min + 0.2 and max(ys) > p.area_y_max - 0.2   # every lane flown
+
+
+def test_transit_and_sweep_respect_speed():
+    m, fc = started(die=None)
+    prev = {}
+
+    def check(m, fc):
+        if m.state in (TRANSIT, SWEEP) and m.follower is not None:
+            c = m.follower.carrot
+            if 'c' in prev and prev['state'] == m.state:
+                assert math.dist(c, prev['c']) <= Params().sweep_speed * DT + 1e-6
+            prev.update(c=c, state=m.state)
+    run(m, fc, 200, hook=check)
+
+
+def test_sweep_altitude_is_takeoff_altitude():
+    m, fc = started(die=None)
+    zs = []
+    run(m, fc, 200, hook=lambda m, fc: zs.append(fc.z) if m.state == SWEEP else None)
+    assert min(zs) > 2.7 and max(zs) < 3.3
+
+
+def test_flicker_below_5_frames_does_not_trigger_center():
     m, fc = started()
-    t_hover = []
-    run(m, fc, 30, hook=lambda m, fc: t_hover.append(fc.t) if m.state == HOVER and not t_hover else None)
-    t_takeoff = [e[0] for e in m.events if e[2] == TAKEOFF][0]
-    assert t_hover[0] - t_takeoff > 2.0 + 3.0 / 1.0 * 0.5   # climb takes time, then 2 s stable
+    shown = {'n': 0}
+
+    def flicker(m, fc):                     # camera only works for 3 frames in a row, then blind
+        fc.camera_on = shown['n'] < 3
+        if fc.t_det is not None and fc.t - fc.t_det < 1e-9:
+            shown['n'] += 1
+    states = run(m, fc, 200, hook=flicker)
+    assert CENTER not in states and states[-2:] == [RTL, DONE]
 
 
-def test_start_refused_with_reasons():
-    m, fc = Mission(), FakeCopter()
-    fc.link_ok, fc.battery = False, 0.2
-    ok, msg = m.start(fc.inputs())
-    assert not ok and 'no FC link' in msg and 'battery' in msg and m.state == IDLE
-    m2 = Mission(p=Params(require_vio=True))
-    ok, msg = m2.start(FakeCopter().inputs())       # source set 1 -> VIO not in use
-    assert not ok and 'VIO required' in msg
-
-
-def test_pilot_override_stops_commands():
+def test_target_lost_resumes_sweep_where_it_left_off():
     m, fc = started()
+    info = {}
 
-    def pilot(m, fc):
-        if m.state == HOVER and fc.mode == 'GUIDED':
-            fc.mode = 'LOITER'
-    run(m, fc, 40, hook=pilot)
+    def hide(m, fc):
+        if m.state == CENTER and 'resume' not in info:
+            info['resume'] = m.sweep_resume[0]
+            info['t'] = fc.t
+        if 't' in info:
+            fc.camera_on = fc.t - info['t'] > 4.0      # blind for 4 s after centering starts
+        if m.state == SWEEP and info.get('resumed') is None and 'resume' in info:
+            info['resumed'] = m.follower.pts[1]        # first point after the drone's position
+    states = run(m, fc, 250, hook=hide)
+    assert states[:6] == FULL + [CENTER, SWEEP]
+    assert m.events[5][3].startswith('target lost')
+    assert info['resumed'] == info['resume']           # heads back to the exact sweep point
+    assert states[-3:] == [CENTER, LAND, DONE]         # finds it again on the resumed sweep
+
+
+def test_center_streams_velocity_every_tick():
+    m, fc = started()
+    gate, n = CommandGate(1.5), {'ticks': 0, 'vel': 0}
+
+    def count(m, fc):
+        if m.state == CENTER:
+            n['ticks'] += 1
+    run(m, fc, 200, hook=count, gate=gate)
+    n['vel'] = sum(1 for c in fc.sent if c.kind == 'velocity')
+    assert n['vel'] >= n['ticks'] - 1 > 0
+
+
+# ---- global rules in the new states ---------------------------------------------------------
+def test_pilot_override_in_sweep_stops_commands():
+    m, fc = started(die=None)
+    run(m, fc, 120, hook=when(SWEEP)(lambda m, fc: setattr(fc, 'mode', 'LOITER')))
+    assert m.state == PILOT and fc.armed
+    assert m.step(fc.inputs()) == []
+
+
+def test_pilot_override_in_center():
+    m, fc = started()
+    run(m, fc, 200, hook=when(CENTER)(lambda m, fc: setattr(fc, 'mode', 'LOITER')))
     assert m.state == PILOT
-    assert m.step(fc.inputs()) == []                # mission silent after override
-    assert fc.armed                                 # mission did not land or disarm
 
 
-def test_mode_change_we_asked_for_is_not_override():
-    m, fc = started(Params(hover_s=3.0))
-    states = run(m, fc, 60)
-    assert PILOT not in states
-
-
-def test_low_battery_rtl():
-    m, fc = started(Params(hover_s=30.0))
-
-    def drain(m, fc):
-        if m.state == HOVER:
-            fc.battery = 0.25
-    states = run(m, fc, 60, hook=drain)
-    assert states[-2:] == [RTL, DONE]
-    assert any(c == Cmd('mode', ('RTL',)) for c in fc.sent)
+def test_low_battery_in_sweep_rtl():
+    m, fc = started(die=None)
+    states = run(m, fc, 200, hook=when(SWEEP)(lambda m, fc: setattr(fc, 'battery', 0.25)))
+    assert states[-2:] == [RTL, DONE] and 'low battery' in m.events[-2][3]
 
 
 def test_time_limit_rtl():
-    m, fc = started(Params(hover_s=100.0, time_limit_s=15.0))
-    states = run(m, fc, 60)
+    m, fc = started(Params(time_limit_s=25.0), die=None)
+    states = run(m, fc, 200)
     assert RTL in states and m.events[states.index(RTL)][3].startswith('time limit')
 
 
 def test_vio_loss_on_set2_failsafe_switches_to_flow_and_lands():
-    m, fc = started(Params(hover_s=30.0))
+    m, fc = started(die=None)
     fc.source_set = 2
-
-    def lose(m, fc):
-        if m.state == HOVER:
-            fc.vio_ok = False
-    states = run(m, fc, 60, hook=lose)
+    states = run(m, fc, 200, hook=when(SWEEP)(lambda m, fc: setattr(fc, 'vio_ok', False)))
     assert states[-3:] == [FAILSAFE, LAND, DONE]
-    assert Cmd('ekf_source', (1,)) in fc.sent
     assert fc.source_set == 1
     first_ekf = next(i for i, c in enumerate(fc.sent) if c.kind == 'ekf_source')
     first_land = next(i for i, c in enumerate(fc.sent) if c == Cmd('mode', ('LAND',)))
-    assert first_ekf < first_land                   # switch to flow before descending
+    assert first_ekf < first_land
+
+
+def test_vio_loss_in_center_failsafe():
+    m, fc = started()
+    fc.source_set = 2
+    states = run(m, fc, 200, hook=when(CENTER)(lambda m, fc: setattr(fc, 'vio_ok', False)))
+    assert states[-3:] == [FAILSAFE, LAND, DONE]
 
 
 def test_vio_loss_on_set1_is_ignored():
     m, fc = started()
-    fc.vio_ok = False                               # flow in use: VIO health irrelevant
-    states = run(m, fc, 60)
+    fc.vio_ok = False
+    states = run(m, fc, 200)
     assert FAILSAFE not in states and states[-1] == DONE
 
 
 def test_link_loss_failsafe_then_land_when_link_returns():
-    m, fc = started(Params(hover_s=30.0))
-    lost = {'t': None}
+    m, fc = started(die=None)
+    lost = {}
 
     def link(m, fc):
-        if m.state == HOVER and lost['t'] is None:
-            lost['t'] = fc.t
-            fc.link_ok = False
-        if lost['t'] is not None and fc.t - lost['t'] > 5.0:
+        if m.state == SWEEP and 't' not in lost:
+            lost['t'], fc.link_ok = fc.t, False
+        if 't' in lost and fc.t - lost['t'] > 5.0:
             fc.link_ok = True
-    states = run(m, fc, 80, hook=link)
+    states = run(m, fc, 200, hook=link)
     assert states[-3:] == [FAILSAFE, LAND, DONE]
 
 
 def test_vio_loss_during_rtl_lands():
-    m, fc = started(Params(hover_s=30.0))
+    m, fc = started(die=None)
     fc.source_set = 2
 
     def h(m, fc):
-        if m.state == HOVER:
+        if m.state == SWEEP:
             fc.battery = 0.2
         if m.state == RTL:
             fc.vio_ok = False
-    states = run(m, fc, 60, hook=h)
+    states = run(m, fc, 200, hook=h)
     assert states[-3:] == [RTL, LAND, DONE]
 
 
 def test_abort_airborne_lands_and_before_takeoff_aborts():
-    m, fc = started(Params(hover_s=30.0))
-    run(m, fc, 40, hook=lambda m, fc: m.abort() if m.state == HOVER and not m.abort_requested else None)
+    m, fc = started(die=None)
+    run(m, fc, 200, hook=when(SWEEP)(lambda m, fc: m.abort() if not m.abort_requested else None))
     assert [e[2] for e in m.events][-2:] == [LAND, DONE]
     m2, fc2 = started()
     m2.abort()
@@ -188,56 +283,68 @@ def test_abort_airborne_lands_and_before_takeoff_aborts():
     assert m2.state == ABORTED and not fc2.sent
 
 
+def test_disarm_in_flight_aborts():
+    m, fc = started(die=None)
+    run(m, fc, 100, hook=when(TRANSIT)(lambda m, fc: setattr(fc, 'armed', False)))
+    assert m.state == ABORTED
+
+
+# ---- preflight / takeoff / plumbing (unchanged behaviour) ----------------------------------
+def test_start_refused_with_reasons():
+    m, fc = Mission(), FakeCopter()
+    fc.link_ok, fc.battery = False, 0.2
+    ok, msg = m.start(fc.inputs())
+    assert not ok and 'no FC link' in msg and 'battery' in msg and m.state == IDLE
+    m2 = Mission(p=Params(require_vio=True))
+    ok, msg = m2.start(FakeCopter().inputs())
+    assert not ok and 'VIO required' in msg
+
+
 def test_preflight_timeout_when_arming_refused():
     m, fc = started(Params(preflight_timeout_s=5.0))
-    fc.apply = lambda cmds: fc.sent.extend(cmds)    # FC ignores everything
+    fc.apply = lambda cmds: fc.sent.extend(cmds)
     run(m, fc, 10)
     assert m.state == ABORTED and 'preflight timeout' in m.reason
 
 
-def test_disarm_in_flight_aborts():
-    m, fc = started(Params(hover_s=30.0))
-    run(m, fc, 40, hook=lambda m, fc: setattr(fc, 'armed', False) if m.state == HOVER else None)
-    assert m.state == ABORTED
-
-
-def test_command_gate_retries_and_dedupes():
-    g = CommandGate(1.5)
-    c = Cmd('mode', ('GUIDED',))
-    assert g.filter([c], 0.0) == [c]
-    assert g.filter([c], 1.0) == []
-    assert g.filter([c], 1.6) == [c]
-    assert g.filter([Cmd('mode', ('LAND',))], 1.7) == [Cmd('mode', ('LAND',))]
-
-
 def test_takeoff_sent_once_when_climb_starts():
-    m, fc = started()
+    m, fc = started(die=None)
     run(m, fc, 30, gate=CommandGate(1.5))
     assert len([c for c in fc.sent if c.kind == 'takeoff']) == 1
 
 
 def test_takeoff_resent_if_still_on_ground():
-    m, fc = started(Params(takeoff_retry_s=5.0, takeoff_timeout_s=30.0))
+    m, fc = started(Params(takeoff_retry_s=5.0), die=None)
     real_apply = fc.apply
     fc.apply = lambda cmds: real_apply([c for c in cmds if c.kind != 'takeoff' or fc.t > 10.0])
     run(m, fc, 40, gate=CommandGate(1.5))
-    assert len([c for c in fc.sent if c.kind == 'takeoff']) >= 1 and HOVER in [e[2] for e in m.events]
+    assert TRANSIT in [e[2] for e in m.events]
 
 
 def test_mode_not_resent_once_fc_is_in_it():
     m, fc = started()
-    run(m, fc, 60, gate=CommandGate(1.5))
+    run(m, fc, 200, gate=CommandGate(1.5))
     assert [c for c in fc.sent if c == Cmd('mode', ('LAND',))] == [Cmd('mode', ('LAND',))]
 
 
 def test_restart_after_finished_mission_only_on_ground():
     m, fc = started()
-    run(m, fc, 60)
+    run(m, fc, 200)
     assert m.state == DONE
     ok, _ = m.start(fc.inputs())
-    assert ok and m.state == PREFLIGHT and m.ground_z is None and m.t_takeoff is None
-    m2, fc2 = started(Params(hover_s=30.0))
-    run(m2, fc2, 40, hook=lambda m, fc: setattr(fc, 'mode', 'LOITER') if m.state == HOVER else None)
+    assert ok and m.state == PREFLIGHT and m.ground_z is None and m.follower is None
+    m2, fc2 = started(die=None)
+    run(m2, fc2, 120, hook=when(SWEEP)(lambda m, fc: setattr(fc, 'mode', 'LOITER')))
     assert m2.state == PILOT and fc2.armed
-    ok, msg = m2.start(fc2.inputs())
-    assert not ok and m2.state == PILOT             # still airborne under pilot control: refuse
+    ok, _ = m2.start(fc2.inputs())
+    assert not ok and m2.state == PILOT
+
+
+def test_command_gate_dedupes_oneshots_and_streams_setpoints():
+    g = CommandGate(1.5)
+    c = Cmd('mode', ('GUIDED',))
+    assert g.filter([c], 0.0) == [c]
+    assert g.filter([c], 1.0) == []
+    assert g.filter([c], 1.6) == [c]
+    h = Cmd('hold', (1.0, 2.0, 3.0, 0.0))
+    assert g.filter([h], 2.0) == [h] and g.filter([h], 2.1) == [h]
