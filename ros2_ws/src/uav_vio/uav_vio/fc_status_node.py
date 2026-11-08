@@ -28,9 +28,12 @@ class FcStatusNode(Node):
         self.s = FcStatus()
         self.prev_warnings = []
         self.prev_source = None
-        self.create_subscription(State, '/mavros/state', self.on_state, 10)
-        self.create_subscription(RCIn, '/mavros/rc/in', self.on_rc, qos_profile_sensor_data)
-        self.create_subscription(StatusText, '/mavros/statustext/recv', self.on_text, 10)
+        # MAVROS publishes several topics BEST_EFFORT (statustext/recv among them); a RELIABLE
+        # subscriber silently gets nothing. A BEST_EFFORT subscriber matches either kind.
+        be = qos_profile_sensor_data
+        self.create_subscription(State, '/mavros/state', self.on_state, be)
+        self.create_subscription(RCIn, '/mavros/rc/in', self.on_rc, be)
+        self.create_subscription(StatusText, '/mavros/statustext/recv', self.on_text, be)
         self.create_subscription(String, '/vio_bridge/status', self.on_bridge, 10)
         self.pub = self.create_publisher(String, '/uav/fc_status', 10)
         self.create_timer(1.0, self.tick)
