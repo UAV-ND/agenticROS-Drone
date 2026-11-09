@@ -1,0 +1,17 @@
+[Unit]
+Description=UAV-ND flight stack: MAVROS + VIO bridge + mission + RC ch6 start trigger + flight log
+After=uav-cuvslam.service
+Wants=uav-cuvslam.service
+
+[Service]
+User=uav-nd-orin
+Group=uav-nd-orin
+SupplementaryGroups=dialout
+ExecStart=/home/uav-nd-orin/Documents/uav-nd/agenticROS-Drone/ros2_ws/src/uav_mission/systemd/start_mission.sh
+KillSignal=SIGINT
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

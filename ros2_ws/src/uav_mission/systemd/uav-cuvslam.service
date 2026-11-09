@@ -1,0 +1,19 @@
+[Unit]
+Description=UAV-ND cuVSLAM (Docker) on the live D435i
+After=docker.service uav-camera.service
+Requires=docker.service
+Wants=uav-camera.service
+
+[Service]
+User=uav-nd-orin
+Group=uav-nd-orin
+SupplementaryGroups=docker video
+ExecStart=/home/uav-nd-orin/Documents/uav-nd/agenticROS-Drone/ros2_ws/src/uav_mission/systemd/start_cuvslam.sh
+ExecStop=/usr/bin/docker stop -t 10 uav_cuvslam
+TimeoutStartSec=0
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
