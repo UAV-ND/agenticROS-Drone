@@ -3,7 +3,7 @@
 #   ros2 launch uav_vio fc_link.launch.py                           # MAVROS + fc_status
 #   ros2 launch uav_vio fc_link.launch.py bridge:=true              # + vio_mavros_bridge (cuVSLAM must run)
 #   ros2 launch uav_vio fc_link.launch.py fcu_url:=udp://:14550@    # e.g. ArduPilot SITL
-#   allow_commands:=true   adds the command + setpoint_raw plugins (used by uav_mission's launch;
+#   allow_commands:=true   adds command, setpoint_raw, global_position, home_position (uav_mission;
 #                          only the mission node then sends commands, through uav_gnc)
 #
 # Default link: Cube USB (/dev/ttyACM0 via by-id). The 40-pin UART (/dev/ttyTHS1 -> TELEM2) receives
@@ -27,7 +27,8 @@ from launch_ros.actions import Node
 
 CUBE_USB = '/dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_440045001451303437363830-if00:115200'
 READ_ONLY_PLUGINS = ['sys_status', 'sys_time', 'imu', 'local_position', 'odometry', 'rc_io']
-COMMAND_PLUGINS = ['command', 'setpoint_raw']
+# global_position: set_gp_origin (GPS-denied EKF origin); home_position: tells us when home is set
+COMMAND_PLUGINS = ['command', 'setpoint_raw', 'global_position', 'home_position']
 
 
 def mavros_node(context):

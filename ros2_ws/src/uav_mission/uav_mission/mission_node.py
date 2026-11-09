@@ -19,7 +19,7 @@ from collections import deque
 
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped, TwistStamped
-from mavros_msgs.msg import RCIn, State, StatusText
+from mavros_msgs.msg import HomePosition, RCIn, State, StatusText
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -47,11 +47,15 @@ class MissionNode(Node):
         self.pose_timeout = float(P('pose_timeout_s', 0.5).value)
         self.vio_timeout = float(P('vio_timeout_s', 0.5).value)
         self.rc_channel = int(P('source_switch_channel', 10).value)
+        origin_geo = (float(P('origin_lat', 41.7030).value), float(P('origin_lon', -86.2390).value),
+                      float(P('origin_alt', 220.0).value))
 
         self.m = Mission(p=params)
         self.gate = CommandGate(float(P('retry_s', 1.5).value))
         self.fc = FcCommander(self, limits)
         self.fc.on_ekf_source_accepted = self.on_source_accepted
+        self.fc.origin_geo = origin_geo
+        self.home_ok = False
         # tells fc_status (and anyone else) about commanded switches, which the FC does not announce
         self.pub_src = self.create_publisher(UInt8, '/uav/ekf_source_cmd', 10)
         self.fcs = FcStatus()
@@ -74,6 +78,7 @@ class MissionNode(Node):
         self.create_subscription(RCIn, '/mavros/rc/in', self.on_rc, be)
         self.create_subscription(Odometry, '/mavros/odometry/out', self.on_vio, be)
         self.create_subscription(PointStamped, '/uav/die/target', self.on_target, 10)
+        self.create_subscription(HomePosition, '/mavros/home_position/home', self.on_home, be)
         self.create_service(Trigger, '/uav/mission/start', self.srv_start)
         self.create_service(Trigger, '/uav/mission/abort', self.srv_abort)
         self.pub = self.create_publisher(String, '/uav/mission/state', 10)
@@ -113,6 +118,11 @@ class MissionNode(Node):
         self.pub_src.publish(UInt8(data=int(source_set)))
         self.get_logger().warn(f'EKF switched to source set {source_set} by mission command')
 
+    def on_home(self, _m):
+        if not self.home_ok:
+            self.get_logger().info('FC home position set')
+        self.home_ok = True
+
     def on_target(self, m):
         now = self.now()
         consecutive = self.t_det is not None and now - self.t_det <= self.det_gap_s
@@ -133,7 +143,8 @@ class MissionNode(Node):
         return Inputs(now=now, link_ok=link_ok, armed=bool(st and st.armed), mode=st.mode if st else '',
                       pose_ok=pose_ok, x=x, y=y, z=z, yaw=yaw, vz=self.vz, battery=self.battery,
                       vio_ok=self.t_vio is not None and now - self.t_vio <= self.vio_timeout,
-                      source_set=self.fcs.effective_source_set(), det_seq=self.det_seq,
+                      source_set=self.fcs.effective_source_set(), home_ok=self.home_ok,
+                      det_seq=self.det_seq,
                       det_frames=self.det_frames, t_det=self.t_det, det_fwd=self.det[0],
                       det_left=self.det[1])
 
@@ -181,7 +192,7 @@ class MissionNode(Node):
         d = self.m.summary(now)
         d.update({'link_ok': i.link_ok, 'armed': i.armed, 'mode': i.mode, 'pose_ok': i.pose_ok,
                   'alt': round(i.z - self.m.ground_z, 2) if self.m.ground_z is not None else None,
-                  'pos': [round(i.x, 2), round(i.y, 2)],
+                  'pos': [round(i.x, 2), round(i.y, 2)], 'home_ok': i.home_ok,
                   'battery': i.battery, 'vio_ok': i.vio_ok, 'source_set': i.source_set,
                   'fc_errors': list(self.fc_errors),
                   'preflight_problems': self.m.preflight_problems(i) if self.m.state == 'IDLE' else []})

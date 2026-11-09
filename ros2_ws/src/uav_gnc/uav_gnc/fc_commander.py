@@ -2,7 +2,8 @@
 
 Used as a library inside the mission node, so exactly one process commands the FC. What it can do
 is deliberately narrow (agreed 2026-11-07): set mode, arm, GUIDED takeoff, position targets,
-velocity targets, switch the EKF source set. It never writes FC parameters and never disarms in the air.
+velocity targets, switch the EKF source set, and set the EKF origin (GPS-denied: ArduPilot cannot
+arm without one; it is a fixed configured lat/lon, a MAVLink message, not a parameter). It never writes FC parameters and never disarms in the air.
 
 Safety limits are applied here, not in the mission logic, so every caller gets them:
   * hold targets are clamped to `max_alt` (above the ground height given at arming) and to a
@@ -12,11 +13,13 @@ Safety limits are applied here, not in the mission logic, so every caller gets t
   * takeoff altitude is clamped to `max_alt`
   * modes are restricted to an allowlist
 
-MAVROS services/topics used (plugins: sys_status, command, setpoint_raw):
-  /mavros/set_mode, /mavros/cmd/arming, /mavros/cmd/command, /mavros/setpoint_raw/local
+MAVROS services/topics used (plugins: sys_status, command, setpoint_raw, global_position):
+  /mavros/set_mode, /mavros/cmd/arming, /mavros/cmd/command, /mavros/setpoint_raw/local,
+  /mavros/global_position/set_gp_origin
 """
 import math
 
+from geographic_msgs.msg import GeoPointStamped
 from mavros_msgs.msg import PositionTarget
 from mavros_msgs.srv import CommandBool, CommandLong, SetMode
 
@@ -48,6 +51,8 @@ class FcCommander:
         self.cli_arm = node.create_client(CommandBool, '/mavros/cmd/arming')
         self.cli_cmd = node.create_client(CommandLong, '/mavros/cmd/command')
         self.pub_sp = node.create_publisher(PositionTarget, '/mavros/setpoint_raw/local', 10)
+        self.pub_origin = node.create_publisher(GeoPointStamped, '/mavros/global_position/set_gp_origin', 10)
+        self.origin_geo = (41.7030, -86.2390, 220.0)   # lat, lon, alt m: any fixed value works indoors
 
     def set_origin(self, x, y, z):
         self.origin = (x, y, z)
@@ -69,6 +74,14 @@ class FcCommander:
             return
         self._call(self.cli_mode, SetMode.Request(custom_mode=mode), f'set_mode {mode}',
                    ok=lambda r: r.mode_sent)
+
+    def do_origin(self):
+        lat, lon, alt = self.origin_geo
+        m = GeoPointStamped()
+        m.header.stamp = self.node.get_clock().now().to_msg()
+        m.position.latitude, m.position.longitude, m.position.altitude = lat, lon, alt
+        self.pub_origin.publish(m)
+        self.log.info(f'EKF origin sent ({lat:.4f}, {lon:.4f}, {alt:.0f} m)')
 
     def do_arm(self):
         self._call(self.cli_arm, CommandBool.Request(value=True), 'arm', ok=lambda r: r.success)

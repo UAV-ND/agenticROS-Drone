@@ -56,3 +56,8 @@ uav_mission:
     vio_timeout_s: 0.5
     retry_s: 1.5
     source_switch_channel: 10
+    # GPS-denied EKF origin, sent in PREFLIGHT if the FC has no home (ArduPilot will not arm
+    # without one). Any fixed point works; this is Notre Dame.
+    origin_lat: 41.7030
+    origin_lon: -86.2390
+    origin_alt: 220.0

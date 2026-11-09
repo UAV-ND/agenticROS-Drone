@@ -110,6 +110,7 @@ class Inputs:
     battery: Optional[float] = None   # fraction 0..1, None = unknown
     vio_ok: bool = False              # bridge output fresh
     source_set: Optional[int] = None  # EKF source set in use
+    home_ok: bool = True              # FC has a home position (False: GPS-denied with no EKF origin yet)
     # latest target detection: body FLU offset of the target from the drone (m)
     det_seq: int = 0                  # increments per detection message
     det_frames: int = 0               # consecutive detections without a gap
@@ -120,7 +121,7 @@ class Inputs:
 
 @dataclass(frozen=True)
 class Cmd:
-    kind: str     # 'mode' | 'arm' | 'takeoff' | 'hold' (x,y,z,yaw) | 'velocity' (vx,vy,vz,yaw) | 'ekf_source'
+    kind: str     # 'origin' | 'mode' | 'arm' | 'takeoff' | 'hold' (x,y,z,yaw) | 'velocity' (vx,vy,vz,yaw) | 'ekf_source'
     args: tuple = ()
 
 
@@ -234,6 +235,10 @@ class Mission:
         if i.now - self.t_state > self.p.preflight_timeout_s:
             self._go(ABORTED, i.now, 'preflight timeout (could not enter GUIDED / arm)')
             return []
+        if not i.home_ok:
+            # GPS-denied: ArduPilot refuses to arm ("AHRS: waiting for home") until it has an EKF
+            # origin. Send one (a fixed configured lat/lon); ArduPilot then sets home from it.
+            return [Cmd('origin')]
         if i.mode != 'GUIDED':
             return [Cmd('mode', ('GUIDED',))]
         if not i.armed:

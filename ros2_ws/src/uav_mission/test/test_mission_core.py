@@ -21,6 +21,7 @@ class FakeCopter:
         self.t_vel = -1e9
         self.die, self.camera_on = die, True        # die (x, y) or None
         self.det_seq, self.det_frames, self.t_det, self.det = 0, 0, None, (0.0, 0.0)
+        self.home_ok = True
         self.sent = []
 
     def apply(self, cmds):
@@ -82,7 +83,8 @@ class FakeCopter:
     def inputs(self):
         return Inputs(now=self.t, link_ok=self.link_ok, armed=self.armed, mode=self.mode, pose_ok=True,
                       x=self.x, y=self.y, z=self.z, yaw=self.yaw, vz=self.vz, battery=self.battery,
-                      vio_ok=self.vio_ok, source_set=self.source_set, det_seq=self.det_seq,
+                      vio_ok=self.vio_ok, source_set=self.source_set, home_ok=self.home_ok,
+                      det_seq=self.det_seq,
                       det_frames=self.det_frames, t_det=self.t_det, det_fwd=self.det[0],
                       det_left=self.det[1])
 
@@ -407,3 +409,24 @@ def test_vio_loss_in_hover_profile_failsafe():
     fc.source_set = 2
     states = run(m, fc, 60, hook=when(HOVER)(lambda m, fc: setattr(fc, 'vio_ok', False)))
     assert states[-3:] == [FAILSAFE, LAND, DONE]
+
+
+
+def test_gps_denied_sends_origin_before_arming():
+    m, fc = started(Params(profile='hover', takeoff_alt=1.5, hover_s=3.0), die=None)
+    fc.home_ok = False
+    real_apply = fc.apply
+
+    def apply(cmds):
+        for c in cmds:
+            if c.kind == 'origin':
+                fc.home_ok = True               # FC sets home from the origin
+            if c.kind == 'arm' and not fc.home_ok:
+                fc.sent.append(c)               # "AHRS: waiting for home": refused
+                continue
+            real_apply([c])
+    fc.apply = apply
+    states = run(m, fc, 40)
+    kinds = [c.kind for c in fc.sent]
+    assert kinds[0] == 'origin' and kinds.index('origin') < kinds.index('arm')
+    assert states == [PREFLIGHT, TAKEOFF, HOVER, LAND, DONE]
