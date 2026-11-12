@@ -186,6 +186,28 @@ importers:
         specifier: ^2.16.3
         version: 2.16.3
 
+  packages/synapse-drone-claude-code:
+    dependencies:
+      '@corebrum/core':
+        specifier: workspace:*
+        version: link:../core
+      '@corebrum/ros-camera':
+        specifier: workspace:*
+        version: link:../ros-camera
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.0.0
+        version: 1.27.1(zod@3.25.76)
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.35
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/synapse-gemini:
     dependencies:
       '@corebrum/core':

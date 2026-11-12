@@ -1,0 +1,35 @@
+{
+  "name": "@uav-nd/drone-claude-code",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "UAV-ND AgenticROS drone MCP server for Claude Code — natural-language drone control over ROS 2",
+  "keywords": [
+    "uav-nd",
+    "drone",
+    "ros2",
+    "mcp",
+    "claude",
+    "ardupilot",
+    "agenticroos"
+  ],
+  "main": "./dist/index.js",
+  "bin": {
+    "drone-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@corebrum/core": "workspace:*",
+    "@corebrum/ros-camera": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "typescript": "^5.7.0"
+  },
+  "author": "UAV-ND",
+  "license": "MIT"
+}
