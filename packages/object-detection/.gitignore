@@ -1,0 +1,22 @@
+# Secrets
+.roboflow_key
+
+# Data (lives in Roboflow; rebuilt by export_roboflow.py / prepare_dataset.py)
+data/
+captures/
+*.cache
+
+# Training output (best weights are copied to models/)
+runs/
+
+# Pretrained base weights (downloaded automatically)
+yolo26n.pt
+yolo26s.pt
+
+# Old files from before the Arducam workflow
+old/
+
+.DS_Store
+__pycache__/
+.venv/
+train_log.txt

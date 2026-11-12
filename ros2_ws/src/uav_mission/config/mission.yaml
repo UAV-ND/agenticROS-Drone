@@ -1,0 +1,63 @@
+# UAV-ND MVP mission parameters (uav_mission mission_node). See mission_core.Params / uav_gnc Limits.
+uav_mission:
+  ros__parameters:
+    profile: sweep            # hover | square | sweep
+    hover_s: 10.0             # hover / square profiles
+    square_side: 1.0          # m, takeoff frame (forward then left)
+    path_speed: 0.3
+    sweep_end: rtl            # rtl (diagram) | return (fly back to start, land)
+    takeoff_alt: 3.0          # m ("Climb to 3 m")
+    alt_tol: 0.3
+    vz_tol: 0.2
+    stable_s: 2.0             # "At 3 m, stable 2 s"
+    preflight_timeout_s: 20.0
+    takeoff_timeout_s: 30.0
+    min_start_battery: 0.5
+    rtl_battery: 0.3
+    time_limit_s: 600.0
+    failsafe_hold_s: 3.0      # "Hold on flow, then land"
+    mode_grace_s: 3.0
+    require_vio: false        # true on the real drone once VIO flies on set 2
+
+    # search area: PLACEHOLDER until the field is known (TAKEOFF FRAME: x forward, y left, m)
+    area_x_min: 2.0
+    area_x_max: 6.0
+    area_y_min: 2.0
+    area_y_max: 6.0
+    lane_spacing: 1.0         # must be smaller than the camera's ground footprint at 3 m
+    transit_speed: 0.5        # m/s
+    sweep_speed: 0.5          # m/s
+    max_lead: 1.0             # m the position target may run ahead of the drone
+    wp_tol: 0.3
+
+    # target ("die")
+    seen_frames: 5            # "Target seen 5 frames"
+    lost_s: 2.0               # "Target lost 2 s"
+    det_timeout_s: 0.3
+    det_gap_s: 0.3            # longer gap between detections restarts the frame count
+    center_tol: 0.15          # m
+    centered_s: 5.0           # "Centered for 5 s"
+    center_kp: 0.6            # PID per axis, (m/s)/m
+    center_ki: 0.05
+    center_kd: 0.1
+    center_max_speed: 0.5
+    center_ma_len: 5          # moving average (main_controller.py MAX_MA_*_LEN)
+    alt_kp: 0.8
+
+    # uav_gnc limits (enforced on every command)
+    max_alt: 5.0              # m above ground at arming
+    min_alt: 0.5
+    max_radius: 20.0          # m from takeoff point (becomes the net rectangle once the field is known)
+    max_speed: 1.0            # m/s horizontal velocity setpoints
+    max_vz: 0.5
+
+    link_timeout_s: 3.0
+    pose_timeout_s: 0.5
+    vio_timeout_s: 0.5
+    retry_s: 1.5
+    source_switch_channel: 10
+    # GPS-denied EKF origin, sent in PREFLIGHT if the FC has no home (ArduPilot will not arm
+    # without one). Any fixed point works; this is Notre Dame.
+    origin_lat: 41.7030
+    origin_lon: -86.2390
+    origin_alt: 220.0

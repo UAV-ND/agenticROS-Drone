@@ -1,0 +1,8 @@
+# MAVROS plugin params for fc_link.launch.py (plugin nodes live under /mavros/<plugin>).
+# timesync_rate defaults to 0 (OFF) when apm_config.yaml isn't loaded. The bridge stamps odometry
+# with camera time and MAVROS converts it to FCU time, which needs TIMESYNC running.
+/mavros/time:
+  ros__parameters:
+    timesync_mode: MAVLINK
+    timesync_rate: 10.0
+    system_time_rate: 1.0

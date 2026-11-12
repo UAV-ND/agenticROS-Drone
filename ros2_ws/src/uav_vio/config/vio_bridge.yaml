@@ -1,0 +1,43 @@
+# UAV-ND VIO -> MAVROS bridge parameters (uav_vio vio_mavros_bridge node).
+# Gate defaults were chosen from recorded cuVSLAM runs (Nov 3-4 2026): normal motion <= 0.5 m/s and
+# <= 50 deg/s, tracking pose variance ~4e-5 m^2 (p99 ~4e-3), occlusion jumps 4-1100 m/s and up to
+# 2300 deg/s with variance 0.03-240 m^2. Re-check max_speed against the AVC task's flight speeds.
+vio_mavros_bridge:
+  ros__parameters:
+    input_topic: /visual_slam/tracking/odometry
+    output_topic: /mavros/odometry/out
+    frame_id: odom              # must match MAVROS (it looks up odom -> odom_ned)
+    child_frame_id: base_link   # must match MAVROS (base_link -> base_link_frd)
+
+    # D435i camera_link pose in base_link (FLU, metres / degrees).
+    # 2026-11-09 airframe mount (BEFORE the planned 20-30 deg down re-tilt; re-measure after it):
+    #   offset tape-measured 108.5 mm forward of frame centre, at frame level, centred left/right;
+    #   tilt from the D435i accelerometer with the drone level: 3.5 deg UP, roll 0.3 deg
+    #   (IMU uncalibrated, |a| read 9.53 m/s^2: treat angles as +-1-2 deg).
+    cam_x: 0.1085
+    cam_y: 0.0
+    cam_z: 0.0
+    cam_roll_deg: 0.0
+    cam_pitch_down_deg: -3.5    # positive = lens tilted down (negative = up)
+    cam_yaw_deg: 0.0
+
+    # none:       world = body pose when cuVSLAM starts (drone must sit level then).
+    # camera_imu: level the world with the D435i accel while still; also logs the measured tilt.
+    level_mode: none
+    imu_topic: /camera/camera/imu
+    level_samples: 200
+
+    max_rate_hz: 30.0
+
+    max_speed: 4.0              # m/s
+    step_margin: 0.05           # m
+    max_ang_rate_deg: 300.0     # deg/s
+    ang_margin_deg: 3.0
+    max_pos_var: 0.02           # m^2
+    max_gap_s: 0.3
+    recover_frames: 15
+    predict_max_s: 0.5
+    max_age_s: 0.25             # input older than this vs node clock is dropped
+    min_pos_var: 0.0001
+    min_rot_var: 0.0001
+    min_vel_var: 0.001

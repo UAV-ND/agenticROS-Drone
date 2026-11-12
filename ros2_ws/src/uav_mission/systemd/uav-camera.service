@@ -1,0 +1,17 @@
+[Unit]
+Description=UAV-ND D435i camera driver (VIO config)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=uav-nd-orin
+Group=uav-nd-orin
+SupplementaryGroups=video plugdev dialout docker
+ExecStart=/home/uav-nd-orin/Documents/uav-nd/agenticROS-Drone/ros2_ws/src/uav_mission/systemd/start_camera.sh
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
