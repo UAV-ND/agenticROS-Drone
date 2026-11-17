@@ -251,6 +251,19 @@ def main():
             cv2.putText(frame, "forward: {:.2f}  right: {:.2f} m/s".format(forward_speed, right_speed), (20, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.putText(frame, error_text, (20, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0) if aligned else (0, 0, 255), 2)
 
+            # Pixel area of every detected die, listed under the dx/dy line.
+            for index, (die_area, _, _, die_label, _) in enumerate(candidates):
+                cv2.putText(
+                    frame,
+                    "{} area: {} px".format(die_label, int(die_area)),
+                    (20, 125 + 30 * index),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 0, 255),
+                    2,
+                )
+
+            
             if args.mode == "flight":
                 writer.write(frame)
             else:
