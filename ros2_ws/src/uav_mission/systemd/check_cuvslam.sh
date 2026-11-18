@@ -15,7 +15,7 @@ else
 fi
 st=$(docker ps --filter name=^uav_cuvslam$ --format '{{.Status}}')
 [ -n "$st" ] && ok "container uav_cuvslam: $st" || bad "container uav_cuvslam not running"
-pgrep -f realsense2_camera_node >/dev/null && ok "camera node running" || bad "camera node not running (uav-camera.service)"
+pgrep -f '^/[^ ]*/realsense2_camera_node' >/dev/null && ok "camera node running" || bad "camera node not running (uav-camera.service)"
 
 python3 - <<'PY' || fail=1
 import sys, time, math, rclpy

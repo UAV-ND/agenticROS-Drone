@@ -6,7 +6,7 @@ CONFIG=$HOME/vio_config/d435i_vio.yaml
 [ -f "$CONFIG" ] || { echo "ERROR: camera config $CONFIG not found"; exit 1; }
 
 # Only one process can own the camera.
-if pgrep -f realsense2_camera_node >/dev/null; then
+if pgrep -f '^/[^ ]*/realsense2_camera_node' >/dev/null; then
     echo "ERROR: a realsense camera node is already running (another terminal or uav-camera.service). Stop it first."
     exit 1
 fi

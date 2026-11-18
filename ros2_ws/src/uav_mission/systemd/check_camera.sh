@@ -11,7 +11,7 @@ if [ -f /etc/systemd/system/uav-camera.service ]; then
 else
     echo "uav-camera.service: not installed (camera started by hand?)"
 fi
-pgrep -f realsense2_camera_node >/dev/null && ok "camera node running" || bad "camera node not running"
+pgrep -f '^/[^ ]*/realsense2_camera_node' >/dev/null && ok "camera node running" || bad "camera node not running"
 
 speed=""
 for d in /sys/bus/usb/devices/*; do

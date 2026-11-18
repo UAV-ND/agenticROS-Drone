@@ -1,0 +1,22 @@
+[Unit]
+Description=UAV-ND Cube link (MAVROS, read-only) + VIO bridge + fc_status + data recorder
+After=uav-cuvslam.service
+Wants=uav-cuvslam.service
+# Both start MAVROS on the Cube's one USB port: only one of them may run.
+Conflicts=uav-mission.service
+
+[Service]
+User=uav-nd-orin
+Group=uav-nd-orin
+SupplementaryGroups=dialout
+ExecStart=/home/uav-nd-orin/Documents/uav-nd/agenticROS-Drone/ros2_ws/src/uav_mission/systemd/start_fclink.sh
+KillSignal=SIGINT
+# Signal only the start script; it stops the recorder, then MAVROS, in order.
+KillMode=mixed
+TimeoutStopSec=20
+# always: also after the watchdog exits because the Cube was unplugged / power-cycled
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
