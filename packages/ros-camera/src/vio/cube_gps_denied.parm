@@ -1,0 +1,97 @@
+# UAV-ND Cube Orange, ArduCopter 4.6.3: GPS-DENIED SETTINGS (ARK Flow set 1 + D435i VIO set 2)
+#
+# This file holds ONLY the settings GPS-denied flight needs. It has no calibration values
+# (compass, accelerometer, RC trims, flow scaler calibration aside) and no flight modes, so
+# loading it never undoes a recalibration.
+# Do NOT load an old full parameter backup instead: that is how VISO_TYPE / EK3_SRC* got
+# silently reverted on Nov 9 and again before the Nov 13 flight.
+#
+# Values are the bench-verified set from 2026-11-09 (cube_known_good_2026-11-09.parm), which
+# passed the EKF-follows-VIO bench test (0.3 cm median difference).
+#
+# HOW TO LOAD (it needs two passes: VISO_* settings only appear after VISO_TYPE=1 and a reboot)
+#   Mission Planner: Config > Full Parameter List > Load from file > this file > Write Params.
+#                    Unplug/replug the Cube, then load + Write Params again.
+#   MAVProxy on the Orin (stop MAVROS first):
+#     ~/mav_venv/bin/mavproxy.py --master=/dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_440045001451303437363830-if00
+#     param load <path>/cube_gps_denied.parm      (then exit, unplug/replug USB, repeat once)
+#   "not found" for VISO_* on the first pass is expected.
+# CHECK AFTERWARDS (read-only; stop MAVROS first):
+#   ~/mav_venv/bin/python check_cube_params.py           -> must end "ALL CRITICAL PARAMETERS MATCH"
+#
+# Changing a value here? Change it on purpose, re-test on the bench, and commit the file.
+
+# ===== EKF3 source set 1: ARK Flow (optical flow velocity, baro height, compass yaw) =====
+EK3_SRC1_POSXY,0
+EK3_SRC1_VELXY,5
+EK3_SRC1_POSZ,1
+EK3_SRC1_VELZ,0
+EK3_SRC1_YAW,1
+# ===== EKF3 source set 2: D435i VIO via MAVROS ODOMETRY (ExternalNav position/velocity/yaw) =====
+EK3_SRC2_POSXY,6
+EK3_SRC2_VELXY,6
+EK3_SRC2_POSZ,1
+EK3_SRC2_VELZ,0
+EK3_SRC2_YAW,6
+# Set 3 unused
+EK3_SRC3_POSXY,0
+EK3_SRC3_VELXY,0
+EK3_SRC3_POSZ,1
+EK3_SRC3_VELZ,0
+EK3_SRC3_YAW,0
+EK3_SRC_OPTIONS,0
+# RC ch10 switches the source set (LOW=1, MID=2, HIGH=3)
+RC10_OPTION,90
+# ===== EKF3 general =====
+AHRS_EKF_TYPE,3
+EK3_ENABLE,1
+EK3_ALT_M_NSE,2
+EK3_FLOW_USE,1
+EK3_FLOW_DELAY,10
+EK3_FLOW_I_GATE,300
+EK3_FLOW_M_NSE,0.25
+EK3_RNG_USE_HGT,70
+EK3_RNG_USE_SPD,2
+EK3_RNG_I_GATE,500
+EK3_RNG_M_NSE,0.5
+# ===== No GPS =====
+GPS1_TYPE,0
+# ===== Visual odometry input (from the Jetson) =====
+VISO_TYPE,1
+# The Jetson bridge already moves VIO to the Cube centre (base_link), so position offset = 0
+VISO_POS_X,0
+VISO_POS_Y,0
+VISO_POS_Z,0
+VISO_ORIENT,0
+VISO_DELAY_MS,30
+VISO_POS_M_NSE,0.2
+VISO_VEL_M_NSE,0.1
+VISO_YAW_M_NSE,0.2
+VISO_QUAL_MIN,0
+VISO_SCALE,1
+# ===== ARK Flow on CAN1 (DroneCAN) =====
+CAN_P1_DRIVER,1
+CAN_D1_PROTOCOL,1
+FLOW_TYPE,6
+FLOW_FXSCALER,-85
+FLOW_FYSCALER,0
+FLOW_ORIENT_YAW,0
+FLOW_POS_X,0
+FLOW_POS_Y,0
+FLOW_POS_Z,0
+# ===== ARK Flow rangefinder (downward) =====
+RNGFND1_TYPE,24
+RNGFND1_ORIENT,25
+RNGFND1_MIN_CM,8
+RNGFND1_MAX_CM,3000
+RNGFND1_GNDCLEAR,14
+# ===== Return-to-launch height (indoor gym): 3 m =====
+RTL_ALT,300
+# ===== Telemetry to the Jetson on USB (SERIAL0): MAVROS needs these streams, in Hz =====
+# position 10, attitude 10, status 2, RC channels 5 (ch6 mission switch), VFR/other 2
+SR0_POSITION,10
+SR0_EXTRA1,10
+SR0_EXT_STAT,2
+SR0_RC_CHAN,5
+SR0_EXTRA2,2
+SR0_EXTRA3,2
