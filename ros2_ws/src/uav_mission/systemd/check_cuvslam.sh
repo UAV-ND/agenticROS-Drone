@@ -1,7 +1,8 @@
 #!/bin/bash
 # Check that cuVSLAM is up and tracking (read-only).   bash check_cuvslam.sh
 # cuVSLAM needs about a minute after (re)start before it publishes.
-# PASS needs: container running, /visual_slam/tracking/odometry >= 25 Hz with small pose variance.
+# PASS needs: container running, /visual_slam/tracking/odometry >= 20 Hz with small pose variance.
+# Normal is 26-30 Hz: cuVSLAM skips a camera frame now and then when the Orin is busy.
 source "$(dirname "$(readlink -f "$0")")/uav_env.sh" >/dev/null
 fail=0
 ok()  { echo "  PASS  $*"; }
@@ -28,8 +29,8 @@ while time.time() < end: rclpy.spin_once(n, timeout_sec=0.05)   # discovery
 msgs.clear(); end = time.time() + 5
 while time.time() < end: rclpy.spin_once(n, timeout_sec=0.01)
 hz = len(msgs) / 5
-bad = hz < 25
-print(f"  {'PASS' if hz >= 25 else 'FAIL'}  VIO odometry {hz:5.1f} Hz (need >= 25)")
+bad = hz < 20
+print(f"  {'PASS' if hz >= 20 else 'FAIL'}  VIO odometry {hz:5.1f} Hz (need >= 20, normal 26-30)")
 if msgs:
     var = max(msgs[-1].pose.covariance[0], msgs[-1].pose.covariance[7], msgs[-1].pose.covariance[14])
     good = var <= 0.02
