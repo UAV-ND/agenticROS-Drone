@@ -18,14 +18,15 @@ pgrep -f realsense2_camera_node >/dev/null && ok "camera node running" || bad "c
 
 python3 - <<'PY' || fail=1
 import sys, time, math, rclpy
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from nav_msgs.msg import Odometry
 rclpy.init(); n = rclpy.create_node('check_cuvslam'); msgs = []
-n.create_subscription(Odometry, '/visual_slam/tracking/odometry', msgs.append, qos_profile_sensor_data)
+n.create_subscription(Odometry, '/visual_slam/tracking/odometry', msgs.append,
+                         QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT))
 end = time.time() + 2
 while time.time() < end: rclpy.spin_once(n, timeout_sec=0.05)   # discovery
 msgs.clear(); end = time.time() + 5
-while time.time() < end: rclpy.spin_once(n, timeout_sec=0.05)
+while time.time() < end: rclpy.spin_once(n, timeout_sec=0.01)
 hz = len(msgs) / 5
 bad = hz < 25
 print(f"  {'PASS' if hz >= 25 else 'FAIL'}  VIO odometry {hz:5.1f} Hz (need >= 25)")
