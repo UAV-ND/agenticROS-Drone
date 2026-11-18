@@ -2,17 +2,19 @@
 # Install / remove the UAV-ND boot services.
 #   sudo bash install_services.sh camera              # only the camera (first step)
 #   sudo bash install_services.sh camera cuvslam      # several
-#   sudo bash install_services.sh                     # all: camera cuvslam mission
-#   sudo bash install_services.sh --uninstall [names] # remove (all if no names)
+#   sudo bash install_services.sh                     # camera cuvslam fclink (NOT mission)
+#   sudo bash install_services.sh mission             # mission: name it explicitly. It uses the Cube port
+#                                                       like fclink, so only one of the two runs at a time.
+#   sudo bash install_services.sh --uninstall [names] # remove (the default three if no names)
 set -e
 D="$(dirname "$(readlink -f "$0")")"
 if [ "$(id -u)" != 0 ]; then echo "run with sudo"; exit 1; fi
 mode=install
 if [ "$1" = "--uninstall" ]; then mode=uninstall; shift; fi
-names="${*:-camera cuvslam mission}"
+names="${*:-camera cuvslam fclink}"
 UNITS=""
 for n in $names; do
-    [ -f "$D/uav-$n.service" ] || { echo "unknown service '$n' (choose from: camera cuvslam mission)"; exit 1; }
+    [ -f "$D/uav-$n.service" ] || { echo "unknown service '$n' (choose from: camera cuvslam fclink mission)"; exit 1; }
     UNITS="$UNITS uav-$n.service"
 done
 if [ $mode = uninstall ]; then

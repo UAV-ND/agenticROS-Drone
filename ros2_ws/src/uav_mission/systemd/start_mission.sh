@@ -3,6 +3,9 @@
 # + RC trigger (pilot starts the mission with ch6 LOW->HIGH) + a flight-log recorder.
 # Nothing flies until the pilot flips the switch AND the mission's preflight checks pass.
 source "$(dirname "$(readlink -f "$0")")/uav_env.sh"
+# Job control: without it, bash starts background programs with Ctrl-C (SIGINT) ignored, so they
+# could not be stopped cleanly and the recording would be cut off.
+set -m
 wait_for_topic /visual_slam/tracking/odometry 240 || echo "cuVSLAM not up yet; starting anyway (preflight will refuse until VIO is healthy)"
 for i in $(seq 1 60); do ls /dev/serial/by-id/*CubeOrange*if00 >/dev/null 2>&1 && break; sleep 2; done
 LOG=$UAV_LOG_ROOT/$(date +%Y%m%d_%H%M%S)
@@ -18,6 +21,6 @@ ros2 bag record -s mcap -o "$LOG/bag" \
     /mavros/local_position/velocity_local /mavros/setpoint_raw/local /mavros/state /mavros/rc/in \
     /mavros/battery /mavros/statustext/recv /mavros/imu/data > "$LOG/bag_record.log" 2>&1 &
 BAG=$!
-trap 'kill -INT $BAG $LAUNCH 2>/dev/null; wait $BAG $LAUNCH' TERM INT
+trap 'kill -INT $BAG 2>/dev/null; wait $BAG; kill -INT $LAUNCH 2>/dev/null; wait $LAUNCH; exit 0' TERM INT
 wait $LAUNCH
 kill -INT $BAG 2>/dev/null; wait $BAG
