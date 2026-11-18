@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the Cube's live parameters with the known-good file (READ-ONLY: never writes parameters).
+"""Compare the Cube's live parameters with cube_gps_denied.parm, the GPS-denied settings file (READ-ONLY: never writes parameters).
 
   ~/mav_venv/bin/python check_cube_params.py                       # live Cube over USB vs known-good
   ~/mav_venv/bin/python check_cube_params.py --live-file dump.parm # an existing dump instead
@@ -14,7 +14,8 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-KNOWN = os.path.join(HERE, 'cube_known_good_2026-11-09.parm')
+# The GPS-denied settings file (no calibration values). The full 2026-11-09 backup is kept for reference.
+KNOWN = os.path.join(HERE, 'cube_gps_denied.parm')
 PORT = '/dev/serial/by-id/usb-Hex_ProfiCNC_CubeOrange_440045001451303437363830-if00'
 # Parameters that break GPS-denied flight if wrong (the five that silently reverted on 2026-11-09 first).
 CRITICAL = ['VISO_TYPE', 'EK3_SRC1_VELXY', 'EK3_SRC2_POSXY', 'EK3_SRC2_VELXY', 'EK3_SRC2_YAW',
