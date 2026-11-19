@@ -3,6 +3,7 @@
 # with no time limit (unlike ~/vio_config/run_cuvslam_live.sh, which is for timed bench tests).
 # Can also be run by hand in a terminal when the service is not installed (Ctrl-C stops it).
 source "$(dirname "$(readlink -f "$0")")/uav_env.sh"
+log_service_to_file cuvslam     # also log to ~/flight_logs/boot####_.../cuvslam.log
 IMAGE=uavnd/cuvslam:4.6
 docker image inspect $IMAGE >/dev/null 2>&1 || { echo "ERROR: Docker image $IMAGE not found"; exit 1; }
 

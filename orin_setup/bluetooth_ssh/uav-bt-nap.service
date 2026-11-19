@@ -1,0 +1,12 @@
+[Unit]
+Description=UAV-ND Bluetooth network access point (SSH over Bluetooth at 169.254.77.1)
+After=bluetooth.service NetworkManager.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=/usr/bin/python3 /home/uav-nd-orin/Documents/uav-nd/agenticROS-Drone/orin_setup/bluetooth_ssh/bt_nap_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
