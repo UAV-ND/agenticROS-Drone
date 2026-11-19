@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 import argparse
 import collections
+import math
 import os
 import sys
 import time
 
+import numpy as np
 import cv2
 import torch
 from ultralytics import YOLO
 
 HOLD_GAP = 0.3  # seconds the die may leave the circle or go undetected during the hold
+DIE_SIDE_METERS = 0.1524  # real side length of the die (6 in)
+CAMERA_FOV_DEGREES = 82.0  # Arducam AR0234 horizontal field of view, from the datasheet
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(1, os.path.join(HERE, "modules"))
 
@@ -77,6 +81,101 @@ def find_dice(model, image, target, conf, device):
         candidates.append((width * height, center, (x1, y1, width, height), label, confidence))
 
     return candidates
+
+
+DieMeasure = collections.namedtuple("DieMeasure", "corners angle area source rotated_area")
+
+
+def die_blob_contour(frame, bounds, clusters=3, work_size=64):
+    """Return the outline of the die's main single-color region, in full-frame pixels.
+
+    No color ranges are used. The YOLO box's pixels are grouped into a few color
+    clusters (k-means in Lab space), the cluster at the center of the box is taken as
+    the die, and the outline of its largest connected region is returned. Return None
+    if the box is too small or no region is found. Call this on a clean frame, before
+    anything is drawn on it.
+    """
+    x, y, width, height = bounds
+    x1, y1 = max(x, 0), max(y, 0)
+    x2, y2 = min(x + width, frame.shape[1]), min(y + height, frame.shape[0])
+    crop = frame[y1:y2, x1:x2]
+    if crop.shape[0] < 8 or crop.shape[1] < 8:
+        return None
+
+    # Cluster on a shrunken copy for speed, then stretch the labels back to full size.
+    scale = work_size / max(crop.shape[:2])
+    small = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA) if scale < 1 else crop
+    lab = cv2.cvtColor(small, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float32)
+    if len(lab) < clusters:
+        return None
+
+    cv2.setRNGSeed(0)  # same frame gives the same clusters every time
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+    _, labels, _ = cv2.kmeans(lab, clusters, None, criteria, 3, cv2.KMEANS_PP_CENTERS)
+    labels = labels.reshape(small.shape[:2]).astype(np.uint8)
+    labels = cv2.resize(labels, (crop.shape[1], crop.shape[0]), interpolation=cv2.INTER_NEAREST)
+
+    # The box is drawn around the die, so the cluster most common in its middle half is the die.
+    rows, cols = labels.shape
+    middle = labels[rows // 4: 3 * rows // 4, cols // 4: 3 * cols // 4]
+    die_label = np.bincount(middle.ravel()).argmax()
+
+    mask = (labels == die_label).astype(np.uint8) * 255
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), dtype=np.uint8))
+    contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
+    if not contours:
+        return None
+    contour = max(contours, key=cv2.contourArea)
+    return contour + np.array([x1, y1], dtype=np.int32)  # crop coordinates -> frame coordinates
+
+
+def measure_die(frame, box_area, bounds, tolerance=1.15, minimum=0.4):
+    """Fit a rotated rectangle to the die's color block, or fall back to the YOLO box.
+
+    Return a DieMeasure:
+      corners       4x2 int array of the rotated rectangle (None when falling back)
+      angle         degrees from vertical in [-45, 45), positive = clockwise on screen
+                    (None when falling back)
+      area          pixel area in use: the rotated rectangle's, or the YOLO box's
+      source        "rotated" or "yolo"
+      rotated_area  the rotated rectangle's area even if it was rejected (None if
+                    it could not be measured)
+
+    The YOLO box is used if anything goes wrong, if the rotated rectangle's area is
+    more than ``tolerance`` times the YOLO box area (15% over by default), or if it is
+    less than ``minimum`` times the YOLO box area (40% by default).
+    """
+    rotated_area = None
+    try:
+        contour = die_blob_contour(frame, bounds)
+        if contour is not None:
+            rect = cv2.minAreaRect(contour)
+            rotated_area = int(rect[1][0] * rect[1][1])
+            if rotated_area > 0 and minimum * box_area <= rotated_area <= tolerance * box_area:
+                corners = cv2.boxPoints(rect)
+                edge = corners[1] - corners[0]
+                # A die is square, so its tilt repeats every 90 degrees: fold into [-45, 45).
+                angle = (math.degrees(math.atan2(edge[1], edge[0])) + 45) % 90 - 45
+                return DieMeasure(corners.astype(np.int32), angle, rotated_area, "rotated", rotated_area)
+    except Exception:
+        pass  # any failure in the measurement falls back to the YOLO box
+    return DieMeasure(None, None, box_area, "yolo", rotated_area)
+
+
+def estimate_height_meters(die_area_px, image_width):
+    """Estimate the camera's height above a flat die from the die's size in the image.
+
+    ``die_area_px`` is the rotated-box area, or the YOLO box area when the color-block
+    fit fell back. Return None if the area is zero. Assumes the die is flat and uses
+    the horizontal field of view only.
+    """
+    side_length_px = math.sqrt(die_area_px)
+    if side_length_px <= 0:
+        return None
+    ground_meters = DIE_SIDE_METERS * image_width / side_length_px  # width of ground in view
+    width_degrees = CAMERA_FOV_DEGREES
+    height_meters = (ground_meters / 2) / math.tan(math.radians(width_degrees / 2))
+    return height_meters
 
 
 def close_resources(camera, writer):
@@ -183,6 +282,11 @@ def main():
                 continue
 
             candidates = find_dice(model, frame, args.target, args.conf, device)
+
+            # Measure on the clean frame, before anything is drawn on it.
+            die_measures = [measure_die(frame, box_area, bounds)
+                            for box_area, _, bounds, _, _ in candidates]
+
             # The most confident die is the one the error and drone commands follow.
             detection = max(candidates, key=lambda candidate: candidate[4]) if candidates else None
             forward_speed, right_speed = 0.0, 0.0
@@ -236,11 +340,21 @@ def main():
             elif inside_since is not None:
                 error_text += "  HOLDING"
 
-            for _, die_center, (x, y, width, height), die_label, _ in candidates:
-                cv2.rectangle(frame, (x, y), (x + width, y + height), (0, 0, 255), 2)
+            # Draw each die: a rotated box with its tilt and area, or the YOLO box if the fit failed.
+            for (_, die_center, (x, y, width, height), die_label, _), measure in zip(candidates, die_measures):
+                if measure.source == "rotated":
+                    color = (255, 255, 0)  # cyan: rotated color-block box
+                    cv2.polylines(frame, [measure.corners], True, color, 2)
+                    rotation_text = "rot: {:+.1f} deg".format(measure.angle)
+                else:
+                    color = (0, 0, 255)  # red: YOLO box fallback
+                    cv2.rectangle(frame, (x, y), (x + width, y + height), color, 2)
+                    rotation_text = "rot: n/a"
                 cv2.circle(frame, die_center, 5, (0, 0, 255), -1)
-                die_text = "{} dx: {} dy: {}".format(die_label, die_center[0] - image_center_x, die_center[1] - image_center_y)
-                cv2.putText(frame, die_text, (x, max(y - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                die_text = "{} dx: {} dy: {}  {}  area: {} px".format(
+                    die_label, die_center[0] - image_center_x, die_center[1] - image_center_y,
+                    rotation_text, measure.area)
+                cv2.putText(frame, die_text, (x, max(y - 10, 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
             overlay = frame.copy()
             cv2.circle(overlay, (image_center_x, image_center_y), args.margin, (0, 255, 0), -1)
@@ -250,6 +364,13 @@ def main():
             cv2.putText(frame, status, (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.putText(frame, "forward: {:.2f}  right: {:.2f} m/s".format(forward_speed, right_speed), (20, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             cv2.putText(frame, error_text, (20, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0) if aligned else (0, 0, 255), 2)
+
+            # Camera height from the followed die's apparent size, shown in dark blue.
+            height_meters = None
+            if detection is not None:
+                height_meters = estimate_height_meters(die_measures[candidates.index(detection)].area, image_width)
+            height_text = "n/a" if height_meters is None else "{:.2f} m".format(height_meters)
+            cv2.putText(frame, "height: " + height_text, (20, 125), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
             if args.mode == "flight":
                 writer.write(frame)
