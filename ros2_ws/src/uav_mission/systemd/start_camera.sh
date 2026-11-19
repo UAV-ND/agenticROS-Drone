@@ -2,6 +2,7 @@
 # Start the D435i camera driver with the VIO config (IR pair + IMU, emitter off).
 # Used by uav-camera.service; can also be run by hand in a terminal (Ctrl-C stops it).
 source "$(dirname "$(readlink -f "$0")")/uav_env.sh"
+log_service_to_file camera     # also log to ~/flight_logs/boot####_.../camera.log
 CONFIG=$HOME/vio_config/d435i_vio.yaml
 [ -f "$CONFIG" ] || { echo "ERROR: camera config $CONFIG not found"; exit 1; }
 

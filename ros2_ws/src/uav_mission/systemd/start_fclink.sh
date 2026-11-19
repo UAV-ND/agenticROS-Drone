@@ -6,6 +6,7 @@
 # The Cube owns one USB port: stop this service before using MAVProxy, Mission Planner over USB
 # or check_cube_params.py on the Orin:   sudo systemctl stop uav-fclink
 source "$(dirname "$(readlink -f "$0")")/uav_env.sh"
+log_service_to_file fclink     # also log to ~/flight_logs/boot####_.../fclink.log
 # Job control: without it, bash starts background programs with Ctrl-C (SIGINT) ignored, so they
 # could not be stopped cleanly and the recording would be cut off.
 set -m
@@ -49,7 +50,7 @@ ros2 bag record -s mcap -o "$LOG/bag" \
     /mavros/local_position/velocity_local /mavros/imu/data /mavros/rc/in /mavros/state \
     /mavros/statustext/recv /uav/fc_status /vio_bridge/status > "$LOG/bag_record.log" 2>&1 &
 BAG=$!
-echo "recording to $LOG"
+echo "recording to $LOG"; echo "$LOG" >> "$UAV_BOOT_LOG_DIR/recordings.txt"
 
 stop() {   # recorder first (closes the bag), then MAVROS + bridge
     kill -INT $BAG 2>/dev/null; wait $BAG 2>/dev/null
