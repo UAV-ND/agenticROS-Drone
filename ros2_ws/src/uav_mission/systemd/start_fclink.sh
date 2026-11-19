@@ -31,10 +31,15 @@ echo "Cube at $dev"
 ros2 topic list 2>/dev/null | grep -qx /visual_slam/tracking/odometry \
     || echo "note: cuVSLAM not publishing yet; the bridge sends nothing to the Cube until it is"
 
-LOG=$UAV_LOG_ROOT/$(date +%Y%m%d_%H%M%S)_fclink
+# Recordings are numbered (run0001, run0002, ...) because the Orin's clock reads 1969 after a boot
+# without internet (no RTC battery), so dates can't be trusted for naming or for cleanup.
+n=$(( $(cat $UAV_LOG_ROOT/.run_counter 2>/dev/null || echo 0) + 1 ))
+echo $n > $UAV_LOG_ROOT/.run_counter
+LOG=$UAV_LOG_ROOT/$(printf run%04d $n)_$(date +%Y%m%d_%H%M%S)_fclink
 mkdir -p "$LOG"
-# Keep the newest 40 recordings.
-ls -1dt $UAV_LOG_ROOT/*_fclink 2>/dev/null | tail -n +41 | xargs -r rm -rf
+# Keep the newest 40 numbered recordings (by run number, not date). Folders renamed by hand
+# (e.g. 2026-11-18_outdoor_vio_flight) don't match run*_fclink and are never deleted.
+ls -1d $UAV_LOG_ROOT/run[0-9][0-9][0-9][0-9]_*_fclink 2>/dev/null | sort | head -n -40 | xargs -r rm -rf
 
 ros2 launch uav_vio fc_link.launch.py bridge:=true &
 LAUNCH=$!
