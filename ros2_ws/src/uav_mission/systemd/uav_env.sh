@@ -2,7 +2,9 @@
 # Common environment for the UAV-ND boot services (sourced by the start_*.sh scripts).
 export UAV_REPO=/home/uav-nd-orin/Documents/uav-nd/agenticROS-Drone
 export UAV_WS=$UAV_REPO/ros2_ws
-export UAV_MISSION_PARAMS=${UAV_MISSION_PARAMS:-$UAV_WS/src/uav_mission/config/flight_test_vio.yaml}
+# Mission uav-mission.service flies when the pilot flips ch6 (config/square_3m_vio.yaml: 3 m square on
+# VIO). Other choices in config/: flight_test_vio.yaml (hover / 1 m square / small sweep).
+export UAV_MISSION_PARAMS=${UAV_MISSION_PARAMS:-$UAV_WS/src/uav_mission/config/square_3m_vio.yaml}
 export UAV_RC_CHANNEL=${UAV_RC_CHANNEL:-6}
 export UAV_CUVSLAM_MODE=${UAV_CUVSLAM_MODE:-1}          # 1 stereo-inertial, 0 stereo only
 export UAV_LOG_ROOT=${UAV_LOG_ROOT:-/home/uav-nd-orin/flight_logs}

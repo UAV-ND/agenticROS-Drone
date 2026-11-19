@@ -1,5 +1,6 @@
 [Unit]
 Description=UAV-ND flight stack: MAVROS + VIO bridge + mission + RC ch6 start trigger + flight log
+# Runs INSTEAD of uav-fclink: the mission (params in uav_env.sh) waits for the pilot's ch6 LOW->HIGH.
 After=uav-cuvslam.service
 Wants=uav-cuvslam.service
 # Both start MAVROS on the Cube's one USB port: only one of them may run.
@@ -14,7 +15,8 @@ KillSignal=SIGINT
 # Signal only the start script; it stops the recorder, then MAVROS, in order.
 KillMode=mixed
 TimeoutStopSec=30
-Restart=on-failure
+# always: also after the watchdog exits because the Cube was unplugged / power-cycled
+Restart=always
 RestartSec=5
 
 [Install]

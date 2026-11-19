@@ -3,11 +3,13 @@
 # PASS needs: MAVROS connected, Cube streaming attitude/position, RC receiver seen,
 # VIO bridge TRACKING and sending odometry to the Cube. Also prints mode, arming, switches.
 source "$(dirname "$(readlink -f "$0")")/uav_env.sh" >/dev/null
-if [ -f /etc/systemd/system/uav-fclink.service ]; then
-    echo "uav-fclink.service: $(systemctl is-active uav-fclink.service), boot start $(systemctl is-enabled uav-fclink.service)"
-else
-    echo "uav-fclink.service: not installed (fc_link started by hand?)"
-fi
+found=0
+for s in uav-fclink uav-mission; do
+    if [ -f /etc/systemd/system/$s.service ]; then
+        found=1; echo "$s.service: $(systemctl is-active $s.service), boot start $(systemctl is-enabled $s.service)"
+    fi
+done
+[ $found = 1 ] || echo "uav-fclink / uav-mission services not installed (link started by hand?)"
 python3 - <<'PY'
 import json, sys, time, rclpy
 from rclpy.qos import QoSProfile, ReliabilityPolicy
