@@ -430,3 +430,52 @@ def test_gps_denied_sends_origin_before_arming():
     kinds = [c.kind for c in fc.sent]
     assert kinds[0] == 'origin' and kinds.index('origin') < kinds.index('arm')
     assert states == [PREFLIGHT, TAKEOFF, HOVER, LAND, DONE]
+
+
+def _load_cfg(name):
+    import os
+    import yaml
+    from uav_gnc.limits import Limits
+    path = os.path.join(os.path.dirname(__file__), '..', 'config', name)
+    with open(path) as f:
+        cfg = yaml.safe_load(f)['uav_mission']['ros__parameters']
+    defaults_p, defaults_l = vars(Params()), vars(Limits())
+    node_only = {'vio_timeout_s', 'link_timeout_s', 'pose_timeout_s', 'retry_s', 'source_switch_channel',
+                 'origin_lat', 'origin_lon', 'origin_alt', 'det_gap_s'}
+    for k, v in cfg.items():
+        assert k in defaults_p or k in defaults_l or k in node_only, f'{name}: unknown parameter {k}'
+        ref = defaults_p.get(k, defaults_l.get(k))
+        if ref is not None:   # the node declares each parameter with its default's type: must match
+            assert type(v) is type(ref), f'{name}: {k} is {type(v).__name__}, node expects {type(ref).__name__}'
+    p = Params(**{k: v for k, v in cfg.items() if k in defaults_p})
+    lim = Limits(**{k: v for k, v in cfg.items() if k in defaults_l})
+    return cfg, p, lim
+
+
+def test_square_3m_vio_config_flies_whole_square_on_vio_and_lands_at_start():
+    cfg, p, lim = _load_cfg('square_3m_vio.yaml')
+    assert p.profile == 'square' and p.square_side == 3.0 and p.require_vio
+    # far corner (diagonal) inside the safety box, with margin for overshoot
+    assert math.hypot(p.square_side, p.square_side) + 0.5 <= lim.max_radius
+    assert p.takeoff_alt + p.alt_tol <= lim.max_alt and p.path_speed <= lim.max_speed
+    m, fc = Mission(p=p), FakeCopter(die=None)
+    fc.source_set = 2                                      # pilot put ch10 on MID (VIO)
+    ok, msg = m.start(fc.inputs())
+    assert ok, msg
+    pts = []
+    states = run(m, fc, 140, hook=lambda m, fc: pts.append((fc.x, fc.y, fc.z)) if m.state == PATH else None)
+    assert states == [PREFLIGHT, TAKEOFF, PATH, HOVER, LAND, DONE]
+    c, s = math.cos(fc.yaw), math.sin(fc.yaw)
+    for f, l in [(3, 0), (3, 3), (0, 3)]:                  # forward, then left, then back
+        corner = (c * f - s * l, s * f + c * l)
+        assert min(math.dist(q[:2], corner) for q in pts) < 0.3, (f, l)
+    assert all(math.hypot(x, y) <= lim.max_radius and abs(z - p.takeoff_alt) < 0.3 for x, y, z in pts)
+    flight_s = m.events[-1][0] - m.events[1][0]
+    assert flight_s < p.time_limit_s, flight_s           # finishes well before the RTL time limit
+    assert math.hypot(fc.x, fc.y) < 0.3 and not fc.armed  # landed back at the start
+
+
+def test_vio_hold_shorter_than_square_config_timeout_does_not_failsafe():
+    """Nov 18: the bridge paused 0.6-0.9 s in the air; the mission must not abort on that."""
+    cfg, p, _ = _load_cfg('square_3m_vio.yaml')
+    assert cfg['vio_timeout_s'] >= 1.0

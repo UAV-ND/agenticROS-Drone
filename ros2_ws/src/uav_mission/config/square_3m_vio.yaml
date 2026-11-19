@@ -1,0 +1,45 @@
+# UAV-ND autonomous VIO square: take off, fly a 3 m square, come back over the takeoff spot, land.
+# Everything on VIO (EKF source set 2). Overrides mission.yaml defaults.
+#
+# This is the file uav-mission.service loads at boot (UAV_MISSION_PARAMS in systemd/uav_env.sh).
+# The pilot starts it with ch6 LOW -> HIGH; ch6 back to LOW in flight = abort (lands where it is).
+# A flight-mode change on the transmitter always takes over from the mission.
+#
+# Geometry is relative to the TAKEOFF POSE: the drone first flies 3 m FORWARD (the way the camera
+# faces at arming), then 3 m LEFT, then 3 m back, then 3 m right to the start. Needs a clear
+# 3 m x 3 m area forward-left of the takeoff spot plus about 1.5 m margin. To fly it forward-RIGHT
+# instead, set square_side: -3.0.
+#
+# Timing at 0.3 m/s: takeoff ~10 s, square 12 m ~45 s, hover 5 s, land ~5 s: about 70 s.
+uav_mission:
+  ros__parameters:
+    profile: square
+    square_side: 3.0          # m (negative = mirrored: forward then RIGHT)
+    path_speed: 0.3           # m/s along the square
+    takeoff_alt: 1.5          # m above the ground at arming
+    hover_s: 5.0              # hover over the start after the square, then LAND
+    stable_s: 2.0             # stable at takeoff_alt this long before starting the square
+    alt_tol: 0.3
+    vz_tol: 0.2
+    max_lead: 1.0
+    wp_tol: 0.3               # m: "back at the start"
+
+    require_vio: true         # refuse to start unless VIO is healthy AND the EKF is on source set 2
+    # VIO counts as lost after this long without bridge output. On Nov 18 the bridge paused for
+    # 0.6-0.9 s twice in the air (cuVSLAM variance just over its gate) and the Cube rode through on
+    # its IMU; 0.5 s would have turned each pause into a FAILSAFE (switch to ARK Flow + land).
+    vio_timeout_s: 1.5
+
+    min_start_battery: 0.5
+    rtl_battery: 0.3
+    time_limit_s: 150.0       # whole flight; then RTL (RTL_ALT is 3 m on the Cube)
+    preflight_timeout_s: 20.0
+    takeoff_timeout_s: 30.0   # not at 1.5 m by then (e.g. props off on the bench) -> LAND
+    failsafe_hold_s: 3.0
+
+    # safety box around the takeoff point (uav_gnc clamps every command to it)
+    max_alt: 2.5              # m
+    min_alt: 0.5
+    max_radius: 5.0           # far corner of the square is 4.24 m from the start
+    max_speed: 0.5            # m/s
+    max_vz: 0.3
