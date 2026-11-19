@@ -1,0 +1,4 @@
+# YOLO26 needs ultralytics 8.4+; it also installs torch, opencv-python and numpy
+ultralytics>=8.4
+pyyaml
+requests

@@ -1,0 +1,4 @@
+version,date,train_images,val_images,mAP50,mAP50-95,prev_mAP50_same_val,Black_dice_mAP50-95,Blue_dice_mAP50-95,Yellow_dice_mAP50-95,red_dice_mAP50-95,note
+dice_v1,2026-10-14,373,122,0.883,0.727,0.055,0.881,0.654,0.675,0.697,"phone-camera dataset (Roboflow rtx-cv, 963 images), before Arducam; prev = original best.pt"
+dice_v2,2026-10-28,174,45,0.907,0.874,0.798,0.660,0.917,0.932,0.989,"first Arducam dataset: 219 images (200 labeled) from 5 videos, Roboflow new-camera-rtx-cv"
+dice_v3,2026-11-02,400,117,0.941,0.918,0.912,0.808,0.953,0.942,0.970,"added 298 Arducam images from 4 new sessions (2026-11-02), incl. 157 decoy backgrounds: blue box, bottle caps, green part, extinguisher, backpack"
