@@ -10,6 +10,7 @@ import { listRobots, resolveRobot } from "../robots.js";
 import {
   attachDisconnectFailSafe,
   checkActionGoalSafety,
+  checkDroneAgentToolSafety,
   checkLiveBindings,
   checkPublishSafety,
   checkTwistMessage,
@@ -48,6 +49,41 @@ test("safety: workspaceLimits is not enforced unless set", () => {
     message: { pose: { position: { x: 99, y: 99 } } },
   });
   assert.equal(hit.block, false);
+});
+
+test("safety: AR-2 denies MAVROS and CV-target writes after path normalization", () => {
+  for (const target of ["/mavros/setpoint_raw/local", "mavros/cmd/arming", "//robot-a//mavros//cmd/arming/"]) {
+    assert.equal(checkDroneAgentToolSafety("ros2_publish", { topic: target }, { kind: "drone" }).block, true);
+    assert.equal(checkDroneAgentToolSafety("ros2_service_call", { service: target }, { kind: "drone" }).block, true);
+  }
+  assert.equal(
+    checkDroneAgentToolSafety("ros2_publish", { topic: "/uav/die/target" }, { kind: "drone" }).block,
+    true,
+  );
+});
+
+test("safety: AR-2 limits drone generic ROS tools to mission control and status", () => {
+  const drone = { kind: "drone" };
+  for (const topic of ["/cmd_vel", "/robot-uav/cmd_vel", "/uav/die/target", "/other/topic"]) {
+    assert.equal(checkDroneAgentToolSafety("ros2_publish", { topic }, drone).block, true, `${topic} publish`);
+  }
+  for (const service of ["/mavros/cmd/arming", "/mavros/param/set", "/other/service"]) {
+    assert.equal(checkDroneAgentToolSafety("ros2_service_call", { service }, drone).block, true, `${service} call`);
+  }
+  for (const toolName of ["ros2_action_goal", "ros2_param_get", "ros2_param_set", "ros2_estop", "run_mission"]) {
+    assert.equal(checkDroneAgentToolSafety(toolName, {}, drone).block, true, `${toolName} should be blocked`);
+  }
+  assert.equal(checkDroneAgentToolSafety("ros2_service_call", { service: "/uav/mission/start" }, drone).block, false);
+  assert.equal(checkDroneAgentToolSafety("ros2_service_call", { service: "/uav/mission/abort" }, drone).block, false);
+  assert.equal(checkDroneAgentToolSafety("ros2_subscribe_once", { topic: "/uav/mission/state" }, drone).block, false);
+  assert.equal(checkDroneAgentToolSafety("ros2_subscribe_once", { topic: "/uav/fc_status" }, drone).block, false);
+  assert.equal(checkDroneAgentToolSafety("ros2_subscribe_once", { topic: "/mavros/state" }, drone).block, true);
+});
+
+test("safety: AR-2 does not disable generic tools for ground robots", () => {
+  assert.equal(checkDroneAgentToolSafety("ros2_publish", { topic: "/cmd_vel" }, { kind: "amr" }).block, false);
+  assert.equal(checkDroneAgentToolSafety("ros2_service_call", { service: "/spawn_entity" }, { kind: "amr" }).block, false);
+  assert.equal(checkDroneAgentToolSafety("ros2_publish", { topic: "/mavros/cmd" }, { kind: "amr" }).block, true);
 });
 
 test("safety: Twist over the per-robot cap is blocked", () => {

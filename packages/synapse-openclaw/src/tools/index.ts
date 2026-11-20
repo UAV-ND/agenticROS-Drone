@@ -1,5 +1,6 @@
 import type { AgentTool, OpenClawPluginApi } from "../plugin-api.js";
 import type { SynapseConfig } from "@corebrum/core";
+import { checkDroneAgentToolSafety, resolveRobotFromArgs } from "@corebrum/core";
 import { registerPublishTool } from "./ros2-publish.js";
 import { registerSubscribeTool } from "./ros2-subscribe.js";
 import { registerServiceTool } from "./ros2-service.js";
@@ -29,7 +30,7 @@ import { registerMissionResumeTool } from "./mission-resume.js";
  * Skill tools registered via `api.registerTool` are captured too, so
  * `buildMissionBindings` can resolve `ros2_<capability_id>` when present.
  */
-function wrapApiWithToolCapture(api: OpenClawPluginApi): {
+function wrapApiWithToolCapture(api: OpenClawPluginApi, config: SynapseConfig): {
   wrappedApi: OpenClawPluginApi;
   registry: ToolRegistry;
 } {
@@ -37,8 +38,34 @@ function wrapApiWithToolCapture(api: OpenClawPluginApi): {
   const wrappedApi: OpenClawPluginApi = {
     ...api,
     registerTool: (tool: AgentTool, opts) => {
-      registry.set(tool.name, tool);
-      api.registerTool(tool, opts);
+      const guardedTool: AgentTool = {
+        ...tool,
+        execute: async (toolCallId, params, signal) => {
+          if (tool.name.startsWith("ros2_") || tool.name === "run_mission") {
+            let robot;
+            try {
+              robot = resolveRobotFromArgs(config, params);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              return {
+                content: [{ type: "text", text: message }],
+                details: { success: false, error: message },
+              };
+            }
+            const safety = checkDroneAgentToolSafety(tool.name, params, robot);
+            if (safety.block) {
+              const message = safety.blockReason ?? "Blocked by agent safety.";
+              return {
+                content: [{ type: "text", text: message }],
+                details: { success: false, error: message },
+              };
+            }
+          }
+          return tool.execute(toolCallId, params, signal);
+        },
+      };
+      registry.set(guardedTool.name, guardedTool);
+      api.registerTool(guardedTool, opts);
     },
   };
   return { wrappedApi, registry };
@@ -50,7 +77,7 @@ function wrapApiWithToolCapture(api: OpenClawPluginApi): {
  * Memory tools register asynchronously from index.ts after initMemory resolves.
  */
 export function registerTools(api: OpenClawPluginApi, config: SynapseConfig): void {
-  const { wrappedApi, registry } = wrapApiWithToolCapture(api);
+  const { wrappedApi, registry } = wrapApiWithToolCapture(api, config);
   registerPublishTool(wrappedApi, config);
   registerSubscribeTool(wrappedApi, config);
   registerServiceTool(wrappedApi, config);

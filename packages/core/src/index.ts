@@ -72,6 +72,7 @@ export {
   extractWorkspacePositions,
   checkWorkspacePayload,
   checkPublishSafety,
+  checkDroneAgentToolSafety,
   checkActionGoalSafety,
   checkInputsWorkspace,
   robotHasMobileBase,

@@ -36,6 +36,7 @@ import {
   capabilityIdFromExternalTool,
   executeExternalCapability,
   checkActionGoalSafety,
+  checkDroneAgentToolSafety,
   resolveSafetyForRobot,
   emergencyStopRobot,
   listPlaces,
@@ -1145,6 +1146,18 @@ export async function handleToolCall(
   if (HIVE_TOOL_NAMES.has(name)) {
     return handleHiveToolCall(name, args, config);
   }
+  if (name.startsWith("ros2_") || name === "run_mission") {
+    let robot;
+    try {
+      robot = resolveRobotFromArgs(config, args);
+    } catch (err) {
+      return robotResolveError(err);
+    }
+    const safety = checkDroneAgentToolSafety(name, args, robot);
+    if (safety.block) {
+      return { content: [{ type: "text", text: safety.blockReason ?? "Blocked by agent safety." }], isError: true };
+    }
+  }
   // ros2_list_capabilities reads skill manifests + intrinsic verbs from
   // local config — no transport required. robot_id is accepted but
   // doesn't change today's response (every robot exposes the same
@@ -1468,8 +1481,9 @@ export async function handleToolCall(
       const rawNode = args["node"] as string;
       const node = toNamespacedTopic(robot.namespace, rawNode);
       const parameter = args["parameter"] as string;
+      const service = `${node}/get_parameters`;
       const response = await transport.callService({
-        service: `${node}/get_parameters`,
+        service,
         type: "rcl_interfaces/srv/GetParameters",
         args: { names: [parameter] },
       });
@@ -1486,9 +1500,10 @@ export async function handleToolCall(
       const rawNode = args["node"] as string;
       const node = toNamespacedTopic(robot.namespace, rawNode);
       const parameter = args["parameter"] as string;
+      const service = `${node}/set_parameters`;
       const value = args["value"];
       const response = await transport.callService({
-        service: `${node}/set_parameters`,
+        service,
         type: "rcl_interfaces/srv/SetParameters",
         args: { parameters: [{ name: parameter, value }] },
       });
