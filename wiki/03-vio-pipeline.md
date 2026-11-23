@@ -2,13 +2,14 @@
 
 [← wiki home](README.md)
 
-```
-D435i (IR stereo 848x480 @30 + IMU, emitter off)
-  └─ uav-camera: realsense2_camera, ~/vio_config/d435i_vio.yaml
-       └─ uav-cuvslam: Isaac ROS cuVSLAM 4.6 (Docker uavnd/cuvslam:4.6), stereo-inertial, ~26-30 Hz
-            └─ /visual_slam/tracking/odometry
-                 └─ vio_mavros_bridge (uav_vio): camera→body mount, gravity-aligned world, gates
-                      └─ /mavros/odometry/out ─► MAVLink ODOMETRY over USB ─► Cube EKF3 ExternalNav (set 2)
+```mermaid
+flowchart LR
+  CAM["D435i<br/>IR stereo 848x480 @ 30 fps<br/>IMU, emitter off"] -- "infra1 · infra2 · imu" --> CUV["cuVSLAM 4.6<br/>Docker uavnd/cuvslam:4.6<br/>~26-30 Hz"]
+  CUV -- "/visual_slam/tracking/odometry" --> BR["vio_mavros_bridge<br/>camera to body mount<br/>gravity-aligned world, gates"]
+  BR -- "/mavros/odometry/out" --> MR["MAVROS"]
+  MR -- "MAVLink ODOMETRY · USB" --> EKF["Cube EKF3<br/>ExternalNav, set 2"]
+  BR -- "/vio_bridge/status" --> FCS["fc_status"]
+  FCS -- "/uav/fc_status" --> USE["check scripts,<br/>uav_mission"]
 ```
 
 ## History
@@ -32,7 +33,21 @@ D435i (IR stereo 848x480 @30 + IMU, emitter off)
 | `max_gap_s` | 0.3 s | input gap → HOLD until it recovers |
 | `max_age_s` | 0.25 s | input older than this is dropped |
 
-Bridge states (on `/vio_bridge/status`): `TRACKING` (sending), `HOLD` (gated), etc. `fc_status` publishes
+Bridge states (on `/vio_bridge/status`), from `uav_vio/vio_bridge_core.py`:
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> WAIT_LEVEL: level_mode on
+  [*] --> WAIT_INIT: level_mode none
+  WAIT_LEVEL --> WAIT_INIT: gravity aligned
+  WAIT_INIT --> TRACKING: recover_frames poses<br/>with variance ≤ 0.02 m²
+  TRACKING --> HOLD: jump (speed > 7 m/s or > 300°/s)<br/>gap > 0.3 s<br/>variance > 0.02 m²
+  HOLD --> TRACKING: recover_frames good poses
+  note right of HOLD: nothing is sent to the Cube.<br/>A jump is absorbed into an offset,<br/>so the output never teleports.
+```
+
+Before any of that, poses older than `max_age_s` or out of order are dropped. Only `TRACKING` sends to the Cube. `fc_status` publishes
 `/uav/fc_status` at 1 Hz: link, armed, mode, EKF source set, bridge state, warnings.
 
 Known behaviour: at takeoff/landing (props wash, close ground) cuVSLAM variance can briefly reach 0.02–0.05

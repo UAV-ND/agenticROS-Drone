@@ -15,7 +15,66 @@ Code: `ros2_ws/src/uav_mission/` (state machine) and `ros2_ws/src/uav_gnc/` (the
 4. GUIDED → arm → **TAKEOFF** to `takeoff_alt`, wait until stable (`stable_s`).
 5. **PATH** (fly the pattern) → **HOVER** over the start (`hover_s`) → **LAND** (the Cube lands and disarms) → **DONE**.
 
-Any time in the air:
+### State machine (`mission_core.py`)
+
+**Square and hover missions** (what flies today):
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> IDLE
+  IDLE --> IDLE: start refused<br/>(a check fails)
+  IDLE --> PREFLIGHT: start accepted<br/>(SD down or /uav/mission/start)
+  PREFLIGHT --> TAKEOFF: GUIDED + armed
+  TAKEOFF --> PATH: at altitude, stable<br/>(square)
+  TAKEOFF --> HOVER: at altitude, stable<br/>(hover)
+  PATH --> HOVER: back over the start
+  HOVER --> LAND: hover_s done
+  LAND --> DONE: landed + disarmed
+  DONE --> [*]
+```
+
+**Safety rules**, checked every tick in every flying state (TAKEOFF through CENTER):
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  state "any flying state" as AIR
+  AIR --> LAND: SD up (abort)
+  AIR --> PILOT: pilot moves the mode switch
+  AIR --> FAILSAFE: VIO lost on set 2,<br/>or FC link lost
+  AIR --> RTL: low battery,<br/>or time limit
+  AIR --> ABORTED: disarmed in flight
+  FAILSAFE --> LAND: EKF to set 1,<br/>hold failsafe_hold_s
+  RTL --> LAND: VIO lost during RTL
+  RTL --> DONE: landed + disarmed
+  LAND --> DONE: landed + disarmed
+  PILOT --> [*]: pilot flies and lands
+  ABORTED --> [*]
+  DONE --> [*]
+```
+
+Also: PREFLIGHT → ABORTED if it can't enter GUIDED / arm in time (or on abort), and TAKEOFF → LAND on takeoff timeout.
+
+**Competition sweep** (`profile: sweep`, written and unit-tested, not flown):
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  TAKEOFF --> TRANSIT: at altitude, stable
+  TRANSIT --> SWEEP: at the search area
+  SWEEP --> CENTER: die seen<br/>(det_frames)
+  CENTER --> SWEEP: die lost (lost_s),<br/>resume where it left off
+  CENTER --> LAND: centred for centered_s
+  SWEEP --> PATH: done, no die<br/>(sweep_end return)
+  SWEEP --> RTL: done, no die<br/>(sweep_end rtl)
+  PATH --> HOVER: back over the start
+  HOVER --> LAND
+  LAND --> DONE
+  RTL --> DONE
+```
+
+In table form, any time in the air:
 
 | Event | What happens |
 |---|---|
@@ -24,6 +83,40 @@ Any time in the air:
 | VIO lost > `vio_timeout_s` while on set 2 | **FAILSAFE**: switch EKF to set 1 (ARK Flow), hold `failsafe_hold_s`, land |
 | FC link lost | hold, land |
 | Battery < `rtl_battery` or flight time > `time_limit_s` | **RTL** (RTL_ALT is 3 m) |
+
+What happens when the pilot flips SD:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor P as RC pilot
+  participant C as Cube Orange
+  participant M as MAVROS
+  participant T as rc_trigger
+  participant N as uav_mission
+  participant G as FcCommander
+  P->>C: SD (ch6) down
+  C->>M: RC_CHANNELS
+  M->>T: /mavros/rc/in (ch6 HIGH)
+  T->>N: /uav/mission/start
+  N->>N: PREFLIGHT checks
+  alt a check fails
+    N-->>T: refused + reason
+  else all OK
+    N-->>T: accepted
+    N->>G: EKF origin, GUIDED, arm, takeoff
+    G->>M: clamped commands
+    M->>C: MAVLink
+    loop every tick (TAKEOFF, PATH, HOVER)
+      N->>G: position target
+      G->>M: setpoint (clamped to the safety box)
+      M->>C: SET_POSITION_TARGET
+    end
+    N->>G: LAND
+    C-->>N: disarmed, DONE
+  end
+  Note over P,N: At any time the pilot's mode switch takes control back (state PILOT)
+```
 
 ROS interface:
 
