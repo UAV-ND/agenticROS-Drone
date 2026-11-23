@@ -8,6 +8,7 @@ Newest first. One line per change; PR numbers in brackets (merge dates in UTC). 
 
 | Date | Change |
 |---|---|
+| 2026-11-23 | `check_mission.sh` reports READY after a finished run (DONE/PILOT/ABORTED, disarmed, SD LOW) instead of failing; fast-square bench test (step 4) logged. |
 | 2026-11-23 | Rule added to `CLAUDE.md`, `AGENTS.md` and the wiki: every PR into `main` carries its wiki update; after merges, check every merged PR is in this changelog. [#17] |
 | 2026-11-23 | Diagrams redrawn in Mermaid (README system + flight flow; wiki: navigation sources, boot services, VIO pipeline, bridge states, mission state machines, mission start sequence, development loop). [#16] |
 | 2026-11-23 | Root `README.md` rewritten as the UAV-ND project overview (research, competition, codebase, wiki, credit to Corebrum Synapse); upstream README kept as `SYNAPSE_README.md`. [#14] |

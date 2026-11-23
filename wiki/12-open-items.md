@@ -27,6 +27,7 @@ Update this list when something is done or found. Dates are when it was raised.
 | 2026-11-18 | Cube IMU heater blocks arming ~2.5 min in the cold |
 | 2026-11-19 | Cube `.BIN` for the first autonomous square not collected |
 | 2026-11-17 | ARK Flow / rangefinder position offsets (FLOW_POS_*, RNGFND1_POS_*) not measured |
+| 2026-11-23 | cuVSLAM at 22 Hz (normal 26–30) with skipped frames (66 ms between frames) → 0.3–0.5 s bridge holds, 8 in 16 min on the bench (camera itself 30 fps, 0 drops). Under the fast mission's 1.0 s VIO timeout, but watch it; check Orin load (`tegrastats`) and clocks |
 | 2026-11-17 | Orin in 25 W mode with dynamic clocks; pinning clocks might steady cuVSLAM rate (untested) |
 | 2026-11-18 | Bluetooth SSH written (`orin_setup/bluetooth_ssh/`), not installed or tested |
 | 2026-11-08 | Orin has no RTC battery: clock reads 1969 without network |
