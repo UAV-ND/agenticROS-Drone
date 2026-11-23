@@ -1,5 +1,5 @@
-# UAV-ND fast autonomous VIO square: take off to 3 m, fly a 10 m square up to 5 m/s, come back over
-# the takeoff spot, land. Everything on VIO (EKF source set 2). Overrides mission.yaml defaults.
+# UAV-ND fast autonomous VIO square: take off to 3 m, fly a 10 m square at the Cube's default top speed,
+# come back over the takeoff spot, land. Everything on VIO (EKF source set 2). Overrides mission.yaml defaults.
 #
 # Choose it for the boot service with:  bash systemd/select_mission.sh square_10m_fast_vio
 # (then restart uav-mission). Started like the 3 m square: SD (ch6) down; SD up in flight = abort.
@@ -9,22 +9,21 @@
 # Needs a clear 10 m x 10 m area forward-left of the takeoff spot plus at least 3 m margin all round.
 #
 # SPEED: the Orin gives the Cube one corner at a time; the Cube plans the speed-up and braking itself
-# (its WPNAV_ACCEL, 2.5 m/s^2) and stops on each corner. path_speed caps the speed, sent as a
-# MAV_CMD_DO_CHANGE_SPEED command (temporary, not a parameter). The Cube smooths each speed-up and
-# braking, so the side length limits the top speed (simulator, 2026-11-22, cap 5 m/s):
-#   10 m sides -> 3.8 m/s peak (square 17 s), 16 m sides -> 4.7 m/s (21 s); ~18-20 m would reach 5.
-#   Corners within 1-6 cm, at most 0.4-0.55 m past the square, height held within 2 cm.
-#   DECISION (2026-11-22): keep 10 m sides and accept ~3.8 m/s; WPNAV_ACCEL stays at the Cube default
-#   (no Mission Planner changes). With path_speed 5.0 the Cube itself limits the peak to ~3.8 m/s.
+# with its own default settings (WPNAV_SPEED 10 m/s, WPNAV_ACCEL 2.5 m/s^2; no Mission Planner changes)
+# and stops on each corner. On 10 m sides the acceleration limit sets the top speed: about 3.8 m/s
+# (simulator, 2026-11-22: square ~17-19 s, corners within 6 cm, at most 0.4 m past a corner, height
+# within 2 cm).
+#   path_speed > 0 = a lower speed limit, sent as MAV_CMD_DO_CHANGE_SPEED (temporary, not a parameter).
+#   path_speed 0.0 = no speed command: the Cube's default limit (the final speed of this mission).
 #   STEP IT UP ON THE REAL DRONE, checking VIO in the logs between flights:
-#     flight 1: path_speed 1.0,  flight 2: path_speed 2.0,  flight 3: path_speed 5.0 (peaks ~3.8 m/s)
+#     flight 1: path_speed 1.0,  flight 2: path_speed 2.0,  flight 3: path_speed 0.0 (Cube default, ~3.8 m/s)
 uav_mission:
   ros__parameters:
     profile: square
     square_side: 10.0         # m (negative = mirrored: forward then RIGHT)
-    path_speed: 1.0           # m/s speed cap per side: 1.0 -> 2.0 -> 5.0 (5.0 peaks ~3.8 m/s on 10 m sides)
+    path_speed: 1.0           # m/s speed limit: 1.0 -> 2.0 -> 0.0 (0.0 = Cube default, ~3.8 m/s on 10 m sides)
     path_mode: waypoints      # corner by corner, the Cube plans each leg (carrot mode tops out ~1-2 m/s)
-    path_settle_s: 2.0        # hold over the start this long while the speed cap is set
+    path_settle_s: 2.0        # hold over the start this long (the speed limit is set here)
     takeoff_alt: 3.0          # m above the ground at arming
     hover_s: 5.0              # hover over the start after the square, then LAND
     stable_s: 2.0
@@ -46,5 +45,5 @@ uav_mission:
     max_alt: 4.0              # m
     min_alt: 0.5
     max_radius: 16.0          # far corner of the square is 14.1 m from the start
-    max_speed: 5.5            # m/s: the speed cap sent to the Cube can't exceed this
+    max_speed: 2.0            # m/s: highest speed limit the Orin may send (0.0 sends none)
     max_vz: 0.5

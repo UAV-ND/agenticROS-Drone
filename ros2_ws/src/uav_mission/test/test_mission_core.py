@@ -487,14 +487,14 @@ def test_vio_hold_shorter_than_square_config_timeout_does_not_failsafe():
     assert cfg['vio_timeout_s'] >= 1.0
 
 
-def test_square_10m_fast_config_flies_corner_by_corner_with_speed_cap():
+def test_square_10m_fast_config_flies_corner_by_corner_at_each_speed_step():
     cfg, p, lim = _load_cfg('square_10m_fast_vio.yaml')
     assert p.profile == 'square' and p.square_side == 10.0 and p.takeoff_alt == 3.0
     assert p.path_mode == 'waypoints'
-    assert p.path_speed <= 2.0, 'real-drone file must start at a low speed (step up 1 -> 2 -> 5 m/s)'
+    assert 0 < p.path_speed <= 1.0, 'real-drone file must start at 1 m/s (step up 1 -> 2 -> Cube default)'
     assert math.hypot(p.square_side, p.square_side) + 1.0 <= lim.max_radius
     assert p.takeoff_alt + p.alt_tol <= lim.max_alt
-    for speed in (p.path_speed, 5.0):                     # the file's speed, and the full speed
+    for speed in (p.path_speed, 2.0, 0.0):          # the file's speed, 2 m/s, and the Cube default (0)
         q = Params(**{**vars(p), 'path_speed': speed})
         assert q.path_speed <= lim.max_speed
         m, fc = Mission(p=q), FakeCopter(die=None)
@@ -506,12 +506,13 @@ def test_square_10m_fast_config_flies_corner_by_corner_with_speed_cap():
         def hook(m, fc):
             if m.state == PATH:
                 pts.append((fc.x, fc.y, fc.z))
-                if fc.speed_cap != speed and math.hypot(fc.x, fc.y) > 0.3:
+                if speed and fc.speed_cap != speed and math.hypot(fc.x, fc.y) > 0.3:
                     moved_before_cap.append((fc.x, fc.y))
         states = run(m, fc, 160, hook=hook)
         assert states == [PREFLIGHT, TAKEOFF, PATH, HOVER, LAND, DONE], (speed, states)
         assert not moved_before_cap, 'left the start before the speed cap was set'
-        assert [c.args[0] for c in fc.sent if c.kind == 'speed'][0] == speed
+        caps = [c.args[0] for c in fc.sent if c.kind == 'speed']
+        assert (caps and caps[0] == speed) if speed else not caps, (speed, caps[:1])
         holds = [c.args[:2] for c in fc.sent if c.kind == 'hold']
         c, s = math.cos(fc.yaw), math.sin(fc.yaw)
         for f, l in [(10, 0), (10, 10), (0, 10)]:
@@ -527,6 +528,13 @@ def test_slow_square_still_uses_carrot_and_no_speed_command():
     run(m, fc, 60)
     kinds = {c.kind for c in fc.sent}
     assert 'hold' in kinds and 'speed' not in kinds
+
+
+def test_cube_default_speed_only_in_waypoints_mode():
+    for p_ in (Params(profile='square', path_speed=0.0),
+               Params(profile='square', path_mode='waypoints', path_speed=-1.0)):
+        ok, msg = Mission(p=p_).start(FakeCopter().inputs())
+        assert not ok and 'path_speed' in msg
 
 
 def test_unknown_path_mode_refused():

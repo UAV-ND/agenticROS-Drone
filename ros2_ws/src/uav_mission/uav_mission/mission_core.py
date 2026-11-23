@@ -13,9 +13,10 @@ Profiles (param `profile`), chosen after TAKEOFF:
           path_mode 'carrot' (default): a position target moved along the square at path_speed
             (smooth and slow; position-only targets top out around 1-2 m/s).
           path_mode 'waypoints' (fast): the target is the next corner; ArduPilot plans the
-            speed-up and braking itself (WPNAV_ACCEL) and stops on it, capped at path_speed with
-            MAV_CMD_DO_CHANGE_SPEED ('speed'). Next corner when within wp_tol. PATH first holds
-            the start for path_settle_s so the speed cap is in place before it moves.
+            speed-up and braking itself (WPNAV_ACCEL) and stops on it. Next corner when within
+            wp_tol. path_speed > 0 caps the speed with MAV_CMD_DO_CHANGE_SPEED ('speed'), and PATH
+            first holds the start for path_settle_s so the cap is in place before it moves.
+            path_speed 0 = no speed command: the Cube's own default limit (WPNAV_SPEED).
   sweep   the full MVP mission below. With no detector running nothing is ever seen, so it just
           flies every lane; sweep_end 'return' then flies back to the start and lands there
           (PATH -> HOVER -> LAND) instead of the diagram's RTL.
@@ -62,7 +63,7 @@ class Params:
     profile: str = 'sweep'            # 'hover' | 'square' | 'sweep' (see module docstring)
     hover_s: float = 10.0             # HOVER duration (hover / square profiles)
     square_side: float = 1.0          # m; + = forward then left of the takeoff pose, - = mirrored
-    path_speed: float = 0.3           # m/s along the square (waypoints mode: speed cap per side)
+    path_speed: float = 0.3           # m/s along the square (waypoints: speed cap; 0 = Cube default)
     path_mode: str = 'carrot'         # 'carrot' | 'waypoints' (fast; see module docstring)
     path_settle_s: float = 2.0        # waypoints mode: hold the start this long while the speed cap is set
     takeoff_alt: float = 3.0          # m above the ground height at arming (also sweep altitude)
@@ -191,6 +192,8 @@ class Mission:
             probs.append(f'unknown profile {p.profile!r} (use one of {PROFILES})')
         if p.path_mode not in ('carrot', 'waypoints'):
             probs.append(f"unknown path_mode {p.path_mode!r} (use 'carrot' or 'waypoints')")
+        if p.path_speed < 0 or (p.path_speed == 0 and p.path_mode != 'waypoints'):
+            probs.append(f'path_speed {p.path_speed} (must be > 0; 0 = Cube default only in waypoints mode)')
         if p.sweep_end not in ('rtl', 'return'):
             probs.append(f"unknown sweep_end {p.sweep_end!r} (use 'rtl' or 'return')")
         if i.battery is not None and i.battery < p.min_start_battery:
@@ -423,21 +426,22 @@ class Mission:
         return [self._takeoff_to_local(f, l, z) for f, l in [(s, 0.0), (s, s), (0.0, s), (0.0, 0.0)]]
 
     def _path_waypoints(self, i: Inputs, dt) -> list:
-        """Fast square: fly corner to corner; ArduPilot shapes each leg, capped at path_speed."""
+        """Fast square: fly corner to corner; ArduPilot shapes each leg. path_speed > 0 caps the
+        speed; path_speed 0 sends no speed command (the Cube's default limit, WPNAV_SPEED)."""
         p, f, pos = self.p, self.follower, (i.x, i.y, i.z)
         t_in = i.now - self.t_state
         start = (*f.pts[0], self.yaw_hold)
         if t_in < 0.5:              # first target switches GUIDED to position control (resets speed)
             return [Cmd('hold', start)]
-        speed = Cmd('speed', (p.path_speed,))
+        speed = [Cmd('speed', (p.path_speed,))] if p.path_speed > 0 else []
         if t_in < p.path_settle_s:  # speed cap in place before moving
-            return [speed, Cmd('hold', start)]
+            return speed + [Cmd('hold', start)]
         if f.done(pos):
             self.hold = (*f.pts[-1], self.yaw_hold)
             self._go(HOVER, i.now, 'path done, back at start')
             return self._hover(i, dt)
         target = f.step(pos)
-        return [speed, Cmd('hold', (*target, self.yaw_hold))]
+        return speed + [Cmd('hold', (*target, self.yaw_hold))]
 
     def _carrot_cmd(self, pos, dt) -> Cmd:
         x, y, z = self.follower.step(pos, dt)
