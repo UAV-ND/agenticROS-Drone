@@ -10,6 +10,12 @@ Profiles (param `profile`), chosen after TAKEOFF:
   hover   TAKEOFF -> HOVER (hold the takeoff point for hover_s) -> LAND -> DONE
   square  TAKEOFF -> PATH (square of square_side m, relative to the takeoff pose; back to start)
           -> HOVER (hover_s) -> LAND -> DONE
+          path_mode 'carrot' (default): a position target moved along the square at path_speed
+            (smooth and slow; position-only targets top out around 1-2 m/s).
+          path_mode 'waypoints' (fast): the target is the next corner; ArduPilot plans the
+            speed-up and braking itself (WPNAV_ACCEL) and stops on it, capped at path_speed with
+            MAV_CMD_DO_CHANGE_SPEED ('speed'). Next corner when within wp_tol. PATH first holds
+            the start for path_settle_s so the speed cap is in place before it moves.
   sweep   the full MVP mission below. With no detector running nothing is ever seen, so it just
           flies every lane; sweep_end 'return' then flies back to the start and lands there
           (PATH -> HOVER -> LAND) instead of the diagram's RTL.
@@ -56,7 +62,9 @@ class Params:
     profile: str = 'sweep'            # 'hover' | 'square' | 'sweep' (see module docstring)
     hover_s: float = 10.0             # HOVER duration (hover / square profiles)
     square_side: float = 1.0          # m; + = forward then left of the takeoff pose, - = mirrored
-    path_speed: float = 0.3           # m/s along the square
+    path_speed: float = 0.3           # m/s along the square (waypoints mode: speed cap per side)
+    path_mode: str = 'carrot'         # 'carrot' | 'waypoints' (fast; see module docstring)
+    path_settle_s: float = 2.0        # waypoints mode: hold the start this long while the speed cap is set
     takeoff_alt: float = 3.0          # m above the ground height at arming (also sweep altitude)
     alt_tol: float = 0.3              # m
     vz_tol: float = 0.2               # m/s
@@ -95,6 +103,25 @@ class Params:
     alt_kp: float = 0.8               # (m/s)/m altitude hold while centering with velocity setpoints
 
 
+class WaypointSequence:
+    """Corner-by-corner path for waypoints mode. Same attributes as PathFollower for summary()."""
+
+    def __init__(self, points, tol):
+        self.pts = [tuple(map(float, q)) for q in points]
+        self.tol, self.seg = tol, 1 if len(self.pts) > 1 else 0   # pts[0] is the start
+        self.carrot = self.pts[self.seg]
+
+    def step(self, pos):
+        """Current corner; move on to the next one once within tol of it."""
+        while self.seg < len(self.pts) - 1 and math.dist(pos, self.pts[self.seg]) <= self.tol:
+            self.seg += 1
+        self.carrot = self.pts[self.seg]
+        return self.carrot
+
+    def done(self, pos) -> bool:
+        return self.seg >= len(self.pts) - 1 and math.dist(pos, self.pts[-1]) <= self.tol
+
+
 @dataclass
 class Inputs:
     now: float
@@ -121,7 +148,8 @@ class Inputs:
 
 @dataclass(frozen=True)
 class Cmd:
-    kind: str     # 'origin' | 'mode' | 'arm' | 'takeoff' | 'hold' (x,y,z,yaw) | 'velocity' (vx,vy,vz,yaw) | 'ekf_source'
+    kind: str     # 'origin' | 'mode' | 'arm' | 'takeoff' | 'hold' (x,y,z,yaw) | 'velocity' (vx,vy,vz,yaw)
+                  # | 'speed' (m/s GUIDED speed cap) | 'ekf_source'
     args: tuple = ()
 
 
@@ -161,6 +189,8 @@ class Mission:
             probs.append('no EKF local position')
         if p.profile not in PROFILES:
             probs.append(f'unknown profile {p.profile!r} (use one of {PROFILES})')
+        if p.path_mode not in ('carrot', 'waypoints'):
+            probs.append(f"unknown path_mode {p.path_mode!r} (use 'carrot' or 'waypoints')")
         if p.sweep_end not in ('rtl', 'return'):
             probs.append(f"unknown sweep_end {p.sweep_end!r} (use 'rtl' or 'return')")
         if i.battery is not None and i.battery < p.min_start_battery:
@@ -262,8 +292,11 @@ class Mission:
                     self.hold = (self.home[0], self.home[1], target, self.yaw_hold)
                     return self._hover(i, dt)
                 if p.profile == 'square':
-                    self.follower = PathFollower([(i.x, i.y, target)] + self._square_points(target),
-                                                 p.path_speed, p.max_lead, p.wp_tol)
+                    pts = [(i.x, i.y, target)] + self._square_points(target)
+                    if p.path_mode == 'waypoints':
+                        self.follower = WaypointSequence(pts, p.wp_tol)
+                    else:
+                        self.follower = PathFollower(pts, p.path_speed, p.max_lead, p.wp_tol)
                     self._go(PATH, i.now, why)
                     return self._path(i, dt)
                 start = self._sweep_points()[0]
@@ -288,6 +321,8 @@ class Mission:
 
     def _path(self, i: Inputs, dt) -> list:
         pos = (i.x, i.y, i.z)
+        if isinstance(self.follower, WaypointSequence):
+            return self._path_waypoints(i, dt)
         if self.follower.done(pos):
             self.hold = (*self.follower.pts[-1], self.yaw_hold)
             self._go(HOVER, i.now, 'path done, back at start')
@@ -386,6 +421,23 @@ class Mission:
         """Square in the takeoff pose's frame: forward s, left s, back, right; ends at the start."""
         s = self.p.square_side
         return [self._takeoff_to_local(f, l, z) for f, l in [(s, 0.0), (s, s), (0.0, s), (0.0, 0.0)]]
+
+    def _path_waypoints(self, i: Inputs, dt) -> list:
+        """Fast square: fly corner to corner; ArduPilot shapes each leg, capped at path_speed."""
+        p, f, pos = self.p, self.follower, (i.x, i.y, i.z)
+        t_in = i.now - self.t_state
+        start = (*f.pts[0], self.yaw_hold)
+        if t_in < 0.5:              # first target switches GUIDED to position control (resets speed)
+            return [Cmd('hold', start)]
+        speed = Cmd('speed', (p.path_speed,))
+        if t_in < p.path_settle_s:  # speed cap in place before moving
+            return [speed, Cmd('hold', start)]
+        if f.done(pos):
+            self.hold = (*f.pts[-1], self.yaw_hold)
+            self._go(HOVER, i.now, 'path done, back at start')
+            return self._hover(i, dt)
+        target = f.step(pos)
+        return [speed, Cmd('hold', (*target, self.yaw_hold))]
 
     def _carrot_cmd(self, pos, dt) -> Cmd:
         x, y, z = self.follower.step(pos, dt)

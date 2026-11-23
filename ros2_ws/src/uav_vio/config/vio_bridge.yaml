@@ -30,7 +30,10 @@ vio_mavros_bridge:
 
     max_rate_hz: 30.0
 
-    max_speed: 4.0              # m/s
+    # 7 m/s (was 4.0) so the fast square (up to 5 m/s, config square_10m_fast_vio.yaml) isn't read as a
+    # tracking jump. The slowest jumps recorded were ~4 m/s, but they all came with pose variance
+    # 0.03-240 m^2, which max_pos_var (0.02) still rejects.
+    max_speed: 7.0              # m/s
     step_margin: 0.05           # m
     max_ang_rate_deg: 300.0     # deg/s
     ang_margin_deg: 3.0
