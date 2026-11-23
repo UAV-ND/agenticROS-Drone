@@ -8,7 +8,7 @@ Newest first. One line per change; PR numbers in brackets (merge dates in UTC). 
 
 | Date | Change |
 |---|---|
-| 2026-11-23 | Rule added to `CLAUDE.md`, `AGENTS.md` and the wiki: every PR into `main` carries its wiki update; after merges, check every merged PR is in this changelog. |
+| 2026-11-23 | Rule added to `CLAUDE.md`, `AGENTS.md` and the wiki: every PR into `main` carries its wiki update; after merges, check every merged PR is in this changelog. [#17] |
 | 2026-11-23 | Diagrams redrawn in Mermaid (README system + flight flow; wiki: navigation sources, boot services, VIO pipeline, bridge states, mission state machines, mission start sequence, development loop). [#16] |
 | 2026-11-23 | Root `README.md` rewritten as the UAV-ND project overview (research, competition, codebase, wiki, credit to Corebrum Synapse); upstream README kept as `SYNAPSE_README.md`. [#14] |
 | 2026-11-23 | Wiki created (`wiki/`). [#13] |
