@@ -8,10 +8,11 @@ Newest first. One line per change; PR numbers in brackets (merge dates in UTC). 
 
 | Date | Change |
 |---|---|
-| 2026-11-23 | Diagrams redrawn in Mermaid (README system + flight flow; wiki: navigation sources, boot services, VIO pipeline, bridge states, mission state machines, mission start sequence, development loop). |
-| 2026-11-22 | Root `README.md` rewritten as the UAV-ND project overview (research, competition, codebase, wiki, credit to Corebrum Synapse); upstream README kept as `SYNAPSE_README.md`. |
-| 2026-11-22 | Wiki created (`wiki/`). |
-| 2026-11-22 | Fast 10 m square at 3 m: `path_mode: waypoints` (corner by corner, Cube plans each leg), `path_speed: 0.0` = Cube default speed (~3.8 m/s on 10 m sides), real-flight steps 1.0 → 2.0 → 0.0; `FcCommander.do_speed` (MAV_CMD_DO_CHANGE_SPEED); bridge jump gate 4 → 7 m/s; `select_mission.sh` / `~/.uav_mission` choose the boot mission. Decision: no Mission Planner parameter changes. [#13] |
+| 2026-11-23 | Rule added to `CLAUDE.md`, `AGENTS.md` and the wiki: every PR into `main` carries its wiki update; after merges, check every merged PR is in this changelog. [#17] |
+| 2026-11-23 | Diagrams redrawn in Mermaid (README system + flight flow; wiki: navigation sources, boot services, VIO pipeline, bridge states, mission state machines, mission start sequence, development loop). [#16] |
+| 2026-11-23 | Root `README.md` rewritten as the UAV-ND project overview (research, competition, codebase, wiki, credit to Corebrum Synapse); upstream README kept as `SYNAPSE_README.md`. [#14] |
+| 2026-11-23 | Wiki created (`wiki/`). [#13] |
+| 2026-11-23 | Fast 10 m square at 3 m: `path_mode: waypoints` (corner by corner, Cube plans each leg), `path_speed: 0.0` = Cube default speed (~3.8 m/s on 10 m sides), real-flight steps 1.0 → 2.0 → 0.0; `FcCommander.do_speed` (MAV_CMD_DO_CHANGE_SPEED); bridge jump gate 4 → 7 m/s; `select_mission.sh` / `~/.uav_mission` choose the boot mission. Decision: no Mission Planner parameter changes. [#13] |
 | 2026-11-19/20 | **First autonomous 3 m square on VIO flown: complete success.** |
 | 2026-11-19 | Autonomous 3 m VIO square started at boot by RC ch6 (`uav-mission` replaces `uav-fclink` at boot, `check_mission.sh`, per-boot log files); SITL kit in `uav_mission/sitl/`. [#12] |
 | 2026-11-19 | Per-boot service logs (`boot####_*`); SSH over Bluetooth setup (not installed yet). [#11] |

@@ -12,6 +12,7 @@ Update this list when something is done or found. Dates are when it was raised.
 | Competition mission (transit, sweep, centre on die, return to the start square) | `profile: sweep` written and unit-tested, not SITL-flown with a detector; needs the real field size and the die detector publishing `/uav/die/target` |
 | Precise return to the 5 ft start square | VIO landed 3 cm from takeoff (EKF frame); ground truth not measured yet |
 | Decide how AI agents drive the drone | `packages/synapse-drone-claude-code` (PR #2) has tools like `drone_takeoff` / `drone_navigate`, but the 2026-11-07 decision is that agents only start/abort `uav_mission` and read status. Reconcile: map the tools onto `/uav/mission/start|abort` and `/uav/mission/state` |
+| Teammates' open PRs | #15 reverts #8 (drone height, `die_tracking/`); #9 dice centering (`dice-tracking-sim`); #3 mission-3 reroute helper (`drone-tools`). Update the wiki when they merge |
 | Integrate dice detection with the mission | `packages/object-detection/`, PR #9 (`dice-tracking-sim`) |
 
 ## Open issues
