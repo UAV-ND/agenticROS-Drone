@@ -64,11 +64,28 @@ in `FakeCopter`). New mission file → add a test.
 
 ## Updating the wiki
 
-Update the wiki **in the same PR** as the change it describes:
+**Rule: the wiki on `main` always matches the code on `main`.** Teammates point their agents at it, so a
+stale wiki means agents act on wrong information. (Also in the root `CLAUDE.md` and `AGENTS.md`.)
+
+**In every PR into `main`** (before it is merged):
 - behaviour / parameters / procedures → the topic page (and `flight-day-checklist.md` if crews need it);
 - a flight or test → a row in [08 Flight log](08-flight-log.md) (and [06](06-simulation.md) for SITL);
-- always → one dated line in [11 Changelog](11-changelog.md), and the status table in [README](README.md) if a milestone moved;
-- open questions → [12 Open items](12-open-items.md).
+- always → one dated line in [11 Changelog](11-changelog.md) with the PR number, and the status table in
+  [README](README.md) if a milestone moved;
+- open questions → [12 Open items](12-open-items.md);
+- nothing to update? Say why in the PR description.
+
+The PR number isn't known until the PR is opened: open the PR, then add `[#N]` to the changelog line in a
+follow-up commit on the same branch before merging.
+
+**After a merge** (and at the start of a work session):
+```bash
+git fetch origin && git checkout main && git pull --ff-only
+gh pr list --state merged --limit 30 --json number,title --jq '.[] | "#\(.number) \(.title)"'   # merged PRs
+grep -o '#[0-9]*' wiki/11-changelog.md | sort -u                                          # PRs the changelog knows about
+```
+Any merged PR missing from the changelog (often a teammate's PR made without an agent) → open a short
+follow-up PR that updates the wiki for it.
 
 Keep pages short and factual, with dates (YYYY-MM-DD) and numbers. Link to code paths instead of copying code.
 The flight-day checklist's master copy is `wiki/flight-day-checklist.md`; print from it.

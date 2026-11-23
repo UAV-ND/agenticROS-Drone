@@ -65,8 +65,10 @@ These are team decisions. Don't work around them; ask the software lead if one b
    `.roboflow_key` stay git-ignored.
 9. **Never delete recorded data**: `~/bags/`, `~/flight_logs/`, `~/vio_runs/` on the Orin.
 10. **GUI tools (RViz, rqt, Mission Planner) need the Orin's own monitor or a laptop**; don't launch GUIs over SSH.
-11. **Keep this wiki current**: when you change behaviour, procedures or results, update the page and add a
-    line to the [changelog](11-changelog.md) in the same PR. See [10](10-development-process.md#updating-the-wiki).
+11. **Keep this wiki current with `main`**: every PR into `main` carries its own wiki update (pages + a
+    [changelog](11-changelog.md) line with the PR number). After a merge, pull `main` and check that every merged
+    PR is in the changelog; if one isn't (e.g. a teammate's), open a follow-up wiki PR. See
+    [10](10-development-process.md#updating-the-wiki).
 
 ## People and roles
 

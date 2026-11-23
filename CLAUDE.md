@@ -3,6 +3,17 @@
 > **UAV-ND drone (Raytheon AVC 2026–27): read [`wiki/README.md`](wiki/README.md) first.** The wiki covers the
 > drone's architecture, missions, flight procedures, rules for agents and the latest status. The rest of this
 > file describes the upstream Corebrum Synapse project (ground robots), not the drone.
+>
+> **Keep the wiki current with `main` (required).** Teammates point their agents at the wiki, so it must match
+> what is merged:
+> 1. **Every PR into `main` includes its wiki update**: the affected wiki page(s), a dated line in
+>    [`wiki/11-changelog.md`](wiki/11-changelog.md) with the PR number, the status table in `wiki/README.md` if a
+>    milestone moved, and [`wiki/08-flight-log.md`](wiki/08-flight-log.md) for flights or tests. No wiki change
+>    needed? Say why in the PR description.
+> 2. **After a PR is merged** (or when you start work): pull `main` and compare the merged PRs
+>    (`gh pr list --state merged`) with the changelog; squash merges don't show in `git log --merges`. If anything merged without its wiki update (e.g. a teammate's PR),
+>    open a follow-up wiki PR right away.
+> 3. Details: [`wiki/10-development-process.md`](wiki/10-development-process.md#updating-the-wiki).
 
 ## What this is
 
