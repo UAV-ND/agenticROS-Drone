@@ -268,8 +268,10 @@ Back to manual flying only at every boot: `sudo bash .../install_services.sh fcl
 3. Flip **ch6 HIGH**. **Expected:** mode GUIDED, it arms, motors spin up (it tries to take off and can't), after
    about 30 s "takeoff timeout" → LAND → it disarms by itself. Watch with `ros2 topic echo /uav/mission/state`.
 4. Repeat, and this time flip **ch6 LOW** while the motors spin: the mission should go to LAND and disarm.
-5. Repeat, and take over with the **flight-mode switch** (move it to another position): mission state becomes
-   `PILOT`; disarm with ch5 (HIGH → LOW) or let it disarm with throttle low.
+5. Repeat, wait about 5 s after it arms, and take over with the **flight-mode switch** (LOITER → ALT_HOLD), **throttle
+   kept fully down**: mission state becomes `PILOT` within about 1 s. Then disarm: throttle down and wait up to 10 s,
+   or mode switch to **LAND** (disarms within a second), or ch5 **up then down**. Don't raise the throttle on the
+   bench: in ALT_HOLD that asks for a climb, so it stays armed. Details: wiki page 13.
 If any step does something else, **don't fly**; send `~/flight_logs/boot####_*/mission.log` and the `run####_*_mission` folder.
 
 ### F2. Before each autonomous flight
@@ -344,7 +346,8 @@ To change the speed between flights: edit `path_speed:` in `config/square_10m_fa
 then `0.0` for the Cube default; write `0.0`, not `0`), then
 `sudo systemctl restart uav-mission` (disarmed) and check again. **Back to the 3 m square:**
 `bash select_mission.sh square_3m_vio` then restart. Before the first fast flight, repeat the **F1 bench test**
-(props off) with the fast mission selected, because the mission code changed.
+(props off) with the fast mission selected, because the mission code changed: **done 2026-11-23, steps 3, 4 and 5
+passed** (wiki page 13 has the results and what is normal on the bench).
 
 ### G2. Before each fast flight (in addition to F2)
 - [ ] **Clear area: 10 m × 10 m forward-left of the drone plus at least 3 m margin all round (about 16 × 16 m)**,
