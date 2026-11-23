@@ -4,8 +4,9 @@
 
 Repo: `github.com/UAV-ND/agenticROS-Drone`. On the Orin: `~/Documents/uav-nd/agenticROS-Drone`.
 
-This repo is a fork of **Corebrum Synapse** (ROS 2 ↔ AI agent bridge for ground robots). Most top-level
-docs (`README.md`, `CLAUDE.md`, `AGENTS.md`, `docs/`, `packages/synapse-*`, `ros2_ws/src/synapse_*`) describe
+This repo is a fork of **Corebrum Synapse** (ROS 2 ↔ AI agent bridge for ground robots), at release 0.7.42.
+The root `README.md` is ours (project overview); the upstream README is kept as `SYNAPSE_README.md`. The other
+upstream docs (`CLAUDE.md`, `AGENTS.md`, `docs/`, `packages/synapse-*`, `ros2_ws/src/synapse_*`) describe
 that upstream project and its ground robot (`/cmd_vel`, Zenoh, OpenClaw). **They do not describe the drone.**
 Synapse is only used to let an AI agent start/abort missions and read status.
 
