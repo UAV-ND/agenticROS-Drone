@@ -46,17 +46,53 @@ Details, numbers and logs: [wiki flight log](wiki/08-flight-log.md) and [changel
 
 ## System at a glance
 
+```mermaid
+flowchart LR
+  subgraph SENS["Sensors"]
+    CAM["Intel RealSense D435i<br/>stereo IR + IMU"]
+    FLOW["ARK Flow<br/>optical flow + rangefinder"]
+  end
+  subgraph ORIN["Jetson Orin Nano · ROS 2 Jazzy"]
+    VSLAM["cuVSLAM<br/>Docker, ~30 Hz"]
+    BRIDGE["vio_mavros_bridge<br/>mount + gating"]
+    MISSION["uav_mission<br/>state machine"]
+    GNC["uav_gnc FcCommander<br/>safety-box clamp"]
+    MAVROS["MAVROS"]
+    AGENT["AI agents · Synapse MCP<br/>start / abort / status"]
+  end
+  subgraph CUBE["Cube Orange · ArduCopter 4.6.3"]
+    EKF["EKF3<br/>set 1 = ARK Flow · set 2 = VIO"]
+    CTRL["Flight control<br/>GUIDED · LOITER · LAND"]
+  end
+  PILOT(["RC safety pilot<br/>always wins"])
+
+  CAM --> VSLAM --> BRIDGE --> MAVROS
+  MISSION --> GNC --> MAVROS
+  AGENT -. "start / abort" .-> MISSION
+  MAVROS == "USB · MAVLink" ==> EKF
+  MAVROS ==> CTRL
+  FLOW == "CAN" ==> EKF
+  EKF --> CTRL
+  PILOT == "RC" ==> CTRL
+  PILOT -. "SD switch: start / abort" .-> MISSION
 ```
-             ┌──────────── Jetson Orin Nano (Ubuntu 24.04, ROS 2 Jazzy) ────────────┐
-D435i ──────►│ cuVSLAM (Docker) ─► vio_mavros_bridge ─┐                              │
-             │                                       ├─► MAVROS ─── USB ──┐          │
-RC switch ──►│ uav_mission (state machine) ─► uav_gnc FcCommander ┘        │          │
-             │ AI agents (Synapse MCP): start / abort / status only        │          │
-             └──────────────────────────────────────────────────────────────┼──────────┘
-                                                                            ▼
-ARK Flow (CAN) ─────────────────────────────► Cube Orange, ArduCopter 4.6.3 (EKF3: set 1 flow, set 2 VIO)
-                                                         ▲
-                                         RC safety pilot (always wins)
+
+An autonomous flight, from the pilot's switch to touchdown:
+
+```mermaid
+flowchart LR
+  SD(["Pilot flips SD down"]) --> PRE["PREFLIGHT<br/>link, VIO, battery, EKF on set 2"]
+  PRE -- "a check fails" --> REF["Refused:<br/>nothing happens"]
+  PRE -- "all OK" --> TO
+  subgraph AIR["In the air · GUIDED"]
+    direction LR
+    TO["Take off"] --> PATH["Fly the pattern"] --> HOV["Hover over the start"]
+  end
+  HOV --> LAND(["Land + auto-disarm"])
+  AIR -. "SD up" .-> LAND
+  AIR -. "pilot moves the mode switch" .-> PIL(["Pilot flies"])
+  AIR -. "VIO lost" .-> FS["Switch to ARK Flow,<br/>hold, land"]
+  AIR -. "low battery / time limit" .-> RTL["Return + land"]
 ```
 
 Hardware: Tarot 650 quad (6S), Cube Orange (ArduCopter 4.6.3), Jetson Orin Nano, ARK Flow, Intel RealSense

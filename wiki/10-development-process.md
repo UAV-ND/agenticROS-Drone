@@ -4,16 +4,19 @@
 
 ## The loop
 
-```
-idea / flight finding
-  → code on a branch (mvp-mission, or a feature branch off it)
-  → unit tests (pytest, FakeCopter)          ── must pass
-  → colcon build
-  → SITL run on ROS domain 42                ── full mission + abort/takeover paths
-  → commit, push, PR into main (a human merges)
-  → props-off bench test on the drone (checklist F1)
-  → flight, stepping up risk (slow → fast, small → large)
-  → log analysis → wiki flight log → next idea
+```mermaid
+flowchart TD
+  IDEA(["Idea or flight finding"]) --> CODE["Code on a branch<br/>mvp-mission or a feature branch"]
+  CODE --> UT{"Unit tests pass?<br/>pytest + FakeCopter"}
+  UT -- no --> CODE
+  UT -- yes --> SITL{"SITL run OK?<br/>domain 42: full mission,<br/>abort, takeover"}
+  SITL -- no --> CODE
+  SITL -- yes --> PR["Commit, push, PR into main<br/>a human merges"]
+  PR --> BENCH{"Props-off bench test<br/>checklist F1"}
+  BENCH -- no --> CODE
+  BENCH -- yes --> FLY["Fly, stepping up risk<br/>slow to fast, small to large"]
+  FLY --> LOGS["Analyse logs<br/>update wiki flight log"]
+  LOGS --> IDEA
 ```
 
 Every real-flight change has gone through this order; the 3 m square flew right the first time because of it.

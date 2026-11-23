@@ -25,14 +25,18 @@ take off to 3 m → transit → grid sweep → centre over a coloured die → la
 
 The Cube's EKF3 has **source sets**. We use two, never fused at the same time:
 
-```
-                       ┌───────────────────── Cube Orange (ArduCopter 4.6.3) ─────────────────────┐
-ARK Flow (CAN) ───────►│ EKF3 source set 1  (optical flow + rangefinder)                          │
-                       │                                                                          │
-D435i ─► cuVSLAM ─► vio_mavros_bridge ─► MAVROS ─USB─► EKF3 source set 2  (ExternalNav = VIO)     │
-        (Docker)        (mount, gates)                 │                                          │
-                       │ RC ch10 / SG switch selects the set: LOW = set 1, MID = set 2            │
-                       └──────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  FLOW["ARK Flow<br/>optical flow + rangefinder"] -- "CAN" --> S1
+  CAM["D435i"] --> VS["cuVSLAM"] --> BR["vio_mavros_bridge<br/>mount, gates"] --> MR["MAVROS"]
+  MR -- "USB · ODOMETRY" --> S2
+  subgraph CUBE["Cube Orange · EKF3"]
+    S1["Source set 1<br/>ARK Flow"]
+    S2["Source set 2<br/>ExternalNav = VIO"]
+    S3["Source set 3<br/>no horizontal aiding<br/>never use"]
+  end
+  SG{{"SG switch, ch10<br/>LOW · MID · HIGH"}} -.-> S1 & S2 & S3
+  MIS["uav_mission"] -. "VIO lost in the air:<br/>switch to set 1" .-> S1
 ```
 
 - **Set 1, ARK Flow**: works with no Orin in the loop. Fallback for everything.
@@ -51,11 +55,14 @@ D435i ─► cuVSLAM ─► vio_mavros_bridge ─► MAVROS ─USB─► EKF3 so
 
 ## Software on the Orin (all start at boot)
 
-```
-uav-camera    realsense2_camera with ~/vio_config/d435i_vio.yaml
-uav-cuvslam   Isaac ROS cuVSLAM 4.6 in Docker (uavnd/cuvslam:4.6), stereo-inertial, ~30 Hz
-uav-mission   MAVROS + vio_mavros_bridge + fc_status + uav_mission + rc_trigger + recorder
-              (or uav-fclink: the same link, read-only, no mission; the two conflict)
+```mermaid
+flowchart LR
+  subgraph BOOT["systemd services, start at boot"]
+    direction LR
+    CAMS["uav-camera<br/>realsense2_camera<br/>~/vio_config/d435i_vio.yaml"] --> CUV["uav-cuvslam<br/>cuVSLAM 4.6 in Docker<br/>stereo-inertial, ~30 Hz"]
+    CUV --> MS["uav-mission<br/>MAVROS + vio_mavros_bridge + fc_status<br/>+ uav_mission + rc_trigger + recorder"]
+  end
+  FCL["uav-fclink<br/>same link, read-only, no mission"] <-. "one or the other" .-> MS
 ```
 
 The pilot starts a mission by flipping **SD (ch6) down**. Details: [04 Missions](04-missions.md),
