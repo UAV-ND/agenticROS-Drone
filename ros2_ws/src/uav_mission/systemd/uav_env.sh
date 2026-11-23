@@ -2,8 +2,14 @@
 # Common environment for the UAV-ND boot services (sourced by the start_*.sh scripts).
 export UAV_REPO=/home/uav-nd-orin/Documents/uav-nd/agenticROS-Drone
 export UAV_WS=$UAV_REPO/ros2_ws
-# Mission uav-mission.service flies when the pilot flips ch6 (config/square_3m_vio.yaml: 3 m square on
-# VIO). Other choices in config/: flight_test_vio.yaml (hover / 1 m square / small sweep).
+# Mission uav-mission.service flies when the pilot flips ch6. Chosen with systemd/select_mission.sh,
+# which writes the config name to ~/.uav_mission; default config/square_3m_vio.yaml (3 m square on VIO).
+# Others in config/: square_10m_fast_vio.yaml (10 m, 3 m high, up to 5 m/s), flight_test_vio.yaml.
+if [ -z "$UAV_MISSION_PARAMS" ] && [ -s /home/uav-nd-orin/.uav_mission ]; then
+    _m=$(tr -d '[:space:]' < /home/uav-nd-orin/.uav_mission)
+    [ -f "$UAV_WS/src/uav_mission/config/$_m.yaml" ] && UAV_MISSION_PARAMS=$UAV_WS/src/uav_mission/config/$_m.yaml \
+        || echo "WARNING: ~/.uav_mission names '$_m', which is not in config/: using the default"
+fi
 export UAV_MISSION_PARAMS=${UAV_MISSION_PARAMS:-$UAV_WS/src/uav_mission/config/square_3m_vio.yaml}
 export UAV_RC_CHANNEL=${UAV_RC_CHANNEL:-6}
 export UAV_CUVSLAM_MODE=${UAV_CUVSLAM_MODE:-1}          # 1 stereo-inertial, 0 stereo only

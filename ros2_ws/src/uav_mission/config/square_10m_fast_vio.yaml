@@ -1,0 +1,49 @@
+# UAV-ND fast autonomous VIO square: take off to 3 m, fly a 10 m square at the Cube's default top speed,
+# come back over the takeoff spot, land. Everything on VIO (EKF source set 2). Overrides mission.yaml defaults.
+#
+# Choose it for the boot service with:  bash systemd/select_mission.sh square_10m_fast_vio
+# (then restart uav-mission). Started like the 3 m square: SD (ch6) down; SD up in flight = abort.
+#
+# Geometry, relative to the TAKEOFF POSE: 10 m FORWARD (the way the camera faces at arming), 10 m LEFT,
+# 10 m back, 10 m right to the start. square_side: -10.0 flies it forward-RIGHT.
+# Needs a clear 10 m x 10 m area forward-left of the takeoff spot plus at least 3 m margin all round.
+#
+# SPEED: the Orin gives the Cube one corner at a time; the Cube plans the speed-up and braking itself
+# with its own default settings (WPNAV_SPEED 10 m/s, WPNAV_ACCEL 2.5 m/s^2; no Mission Planner changes)
+# and stops on each corner. On 10 m sides the acceleration limit sets the top speed: about 3.8 m/s
+# (simulator, 2026-11-22: square ~17-19 s, corners within 6 cm, at most 0.4 m past a corner, height
+# within 2 cm).
+#   path_speed > 0 = a lower speed limit, sent as MAV_CMD_DO_CHANGE_SPEED (temporary, not a parameter).
+#   path_speed 0.0 = no speed command: the Cube's default limit (the final speed of this mission).
+#   STEP IT UP ON THE REAL DRONE, checking VIO in the logs between flights:
+#     flight 1: path_speed 1.0,  flight 2: path_speed 2.0,  flight 3: path_speed 0.0 (Cube default, ~3.8 m/s)
+uav_mission:
+  ros__parameters:
+    profile: square
+    square_side: 10.0         # m (negative = mirrored: forward then RIGHT)
+    path_speed: 1.0           # m/s speed limit: 1.0 -> 2.0 -> 0.0 (0.0 = Cube default, ~3.8 m/s on 10 m sides)
+    path_mode: waypoints      # corner by corner, the Cube plans each leg (carrot mode tops out ~1-2 m/s)
+    path_settle_s: 2.0        # hold over the start this long (the speed limit is set here)
+    takeoff_alt: 3.0          # m above the ground at arming
+    hover_s: 5.0              # hover over the start after the square, then LAND
+    stable_s: 2.0
+    alt_tol: 0.3
+    vz_tol: 0.2
+    wp_tol: 0.5               # m: corner reached -> next corner; and "back at the start"
+
+    require_vio: true         # refuse to start unless VIO is healthy AND the EKF is on source set 2
+    vio_timeout_s: 1.0        # faster flight: treat VIO as lost sooner than the 3 m square (1.5 s)
+
+    min_start_battery: 0.6
+    rtl_battery: 0.35
+    time_limit_s: 150.0       # whole flight; then RTL (RTL_ALT is 3 m on the Cube)
+    preflight_timeout_s: 20.0
+    takeoff_timeout_s: 30.0
+    failsafe_hold_s: 3.0
+
+    # safety box around the takeoff point (uav_gnc clamps every command to it)
+    max_alt: 4.0              # m
+    min_alt: 0.5
+    max_radius: 16.0          # far corner of the square is 14.1 m from the start
+    max_speed: 2.0            # m/s: highest speed limit the Orin may send (0.0 sends none)
+    max_vz: 0.5

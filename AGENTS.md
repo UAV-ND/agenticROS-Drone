@@ -1,5 +1,9 @@
 # Corebrum Synapse
 
+> **UAV-ND drone (Raytheon AVC 2026–27): read [`wiki/README.md`](wiki/README.md) first.** The wiki covers the
+> drone's architecture, missions, flight procedures, rules for agents and the latest status. The rest of this
+> file describes the upstream Corebrum Synapse project (ground robots), not the drone.
+
 ## What this is
 
 Corebrum Synapse is a ROS2 integration for AI agent platforms. It provides a **core** (transport, types, config) and **adapters** per platform.

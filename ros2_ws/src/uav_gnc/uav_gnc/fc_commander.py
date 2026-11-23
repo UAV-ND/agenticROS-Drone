@@ -2,7 +2,8 @@
 
 Used as a library inside the mission node, so exactly one process commands the FC. What it can do
 is deliberately narrow (agreed 2026-11-07): set mode, arm, GUIDED takeoff, position targets,
-velocity targets, switch the EKF source set, and set the EKF origin (GPS-denied: ArduPilot cannot
+velocity targets, the GUIDED speed cap (MAV_CMD_DO_CHANGE_SPEED, added 2026-11-22: a temporary
+command, not a parameter; it lasts until the next mode change), switch the EKF source set, and set the EKF origin (GPS-denied: ArduPilot cannot
 arm without one; it is a fixed configured lat/lon, a MAVLink message, not a parameter). It never writes FC parameters and never disarms in the air.
 
 Safety limits are applied here, not in the mission logic, so every caller gets them:
@@ -11,6 +12,7 @@ Safety limits are applied here, not in the mission logic, so every caller gets t
   * velocity targets are capped to `max_speed` / `max_vz`, and the outward component is removed at
     the radius / altitude limits
   * takeoff altitude is clamped to `max_alt`
+  * the GUIDED speed cap is clamped to `max_speed`
   * modes are restricted to an allowlist
 
 MAVROS services/topics used (plugins: sys_status, command, setpoint_raw, global_position):
@@ -26,6 +28,7 @@ from mavros_msgs.srv import CommandBool, CommandLong, SetMode
 from uav_gnc.limits import Limits, clamp_hold, clamp_velocity
 
 MAV_CMD_NAV_TAKEOFF = 22
+MAV_CMD_DO_CHANGE_SPEED = 178
 MAV_CMD_SET_EKF_SOURCE_SET = 42007
 ALLOWED_MODES = {'GUIDED', 'LAND', 'RTL', 'LOITER', 'BRAKE'}
 
@@ -90,6 +93,12 @@ class FcCommander:
         alt = min(alt, self.lim.max_alt)
         req = CommandLong.Request(command=MAV_CMD_NAV_TAKEOFF, param7=float(alt))
         self._call(self.cli_cmd, req, f'takeoff {alt:.1f} m', ok=lambda r: r.success)
+
+    def do_speed(self, speed: float):
+        """Cap the horizontal speed ArduPilot uses to fly to GUIDED position targets (m/s)."""
+        speed = max(0.1, min(float(speed), self.lim.max_speed))
+        req = CommandLong.Request(command=MAV_CMD_DO_CHANGE_SPEED, param1=1.0, param2=speed, param3=-1.0)
+        self._call(self.cli_cmd, req, f'GUIDED speed {speed:.1f} m/s', ok=lambda r: r.success)
 
     def do_ekf_source(self, source_set: int):
         req = CommandLong.Request(command=MAV_CMD_SET_EKF_SOURCE_SET, param1=float(source_set))
