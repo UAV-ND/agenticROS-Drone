@@ -8,6 +8,7 @@ Newest first. One line per change; PR numbers in brackets (merge dates in UTC). 
 
 | Date | Change |
 |---|---|
+| 2026-11-22 | Root `README.md` rewritten as the UAV-ND project overview (research, competition, codebase, wiki, credit to Corebrum Synapse); upstream README kept as `SYNAPSE_README.md`. |
 | 2026-11-22 | Wiki created (`wiki/`). |
 | 2026-11-22 | Fast 10 m square at 3 m: `path_mode: waypoints` (corner by corner, Cube plans each leg), `path_speed: 0.0` = Cube default speed (~3.8 m/s on 10 m sides), real-flight steps 1.0 → 2.0 → 0.0; `FcCommander.do_speed` (MAV_CMD_DO_CHANGE_SPEED); bridge jump gate 4 → 7 m/s; `select_mission.sh` / `~/.uav_mission` choose the boot mission. Decision: no Mission Planner parameter changes. [#13] |
 | 2026-11-19/20 | **First autonomous 3 m square on VIO flown: complete success.** |
