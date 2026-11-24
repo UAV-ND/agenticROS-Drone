@@ -30,7 +30,7 @@ Environment for all scripts: `uav_env.sh` (ROS domain, workspace, `UAV_MISSION_P
 | `check_camera.sh` | camera streaming at ~30 fps |
 | `check_cuvslam.sh` | cuVSLAM ≥ 20 Hz |
 | `check_fclink.sh` | MAVROS connected, Cube attitude/position ≥ 5 Hz, RC seen, bridge TRACKING, VIO to Cube ≥ 20 Hz; prints mode, EKF set, switch positions |
-| `check_mission.sh` | mission node IDLE, preflight would accept a start now, ch6 trigger ready; prints the mission file |
+| `check_mission.sh` | mission node IDLE (or finished and disarmed: the next SD flip restarts it), preflight would accept a start now, SD (ch6) LOW; prints the mission file |
 | `check_all.sh` | all four → `ALL READY` |
 
 ## Logs and recordings (`~/flight_logs/`)

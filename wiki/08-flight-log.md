@@ -7,6 +7,7 @@ Positions are the Cube's EKF estimate (what the navigation source believed), not
 
 | Date | What | Result | Data |
 |---|---|---|---|
+| 2026-11-23 | **Props-off bench test of the fast square** | **Passed steps 3, 4, 5.** Timeout: 30 s → LAND → disarmed. Abort (twice): SD up → LAND → disarmed in 4–5 s. Takeover: mode switch → `PILOT` in 0.1 s, no further commands; stayed armed ~60 s because the throttle was raised, disarmed via LAND. cuVSLAM at 22 Hz with short VIO pauses (0.3–0.5 s). Details: [13](13-fast-mission-testing.md) | boot 17, `run0008_*_mission` |
 | 2026-11-22 | Fast 10 m square at 3 m, **simulator** | Cube default speed: peak 3.78 m/s, corners ≤ 7 cm, landed 1 cm from start | [06](06-simulation.md) |
 | 2026-11-19/20 | **First autonomous 3 m square on VIO** (real drone, SD start) | **Complete success.** 57 s flight; corners within 5–7 cm, median 2 cm from the outline, 0.30 m/s, height 1.35–1.55 m; hover 3 cm and **landed 3 cm from takeoff**; gentle landing, auto-disarm; VIO 29.4 Hz, no gaps, no bridge holds; EKF vs VIO median 2.3 cm. Procedure issues: throttle left low, mode switch on STABILIZE | `first_autonomous_square_run0004/` (README, `analyze_square.py`, `analysis.txt`); boot 13. Cube .BIN not collected |
 | 2026-11-18 | Props-off bench test of the mission service | Passed: start, ch6 abort, mode takeover | checklist F1 |

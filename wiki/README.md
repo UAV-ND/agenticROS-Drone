@@ -20,7 +20,7 @@ It is written for teammates **and for their AI coding agents**: point your agent
 | Boot services: camera, cuVSLAM, Cube link, health checks | done 2026-11-17/18 |
 | Outdoor flight on VIO incl. LOITER on VIO | done 2026-11-18, held ~0.2 m |
 | **Autonomous 3 m square on VIO** (started by RC switch) | **flown 2026-11-19/20: complete success**, corners within 7 cm, landed 3 cm from takeoff |
-| Fast autonomous 10 m square at 3 m (Cube default speed, ~3.8 m/s) | code + simulator done, PR #13; real flights next (1 → 2 m/s → default) |
+| Fast autonomous 10 m square at 3 m (Cube default speed, ~3.8 m/s) | simulator + props-off bench test passed (2026-11-23); flight G-1 (1 m/s) next. [13](13-fast-mission-testing.md) |
 | Competition mission (transit, grid sweep, centre on die, return) | state machine written and unit-tested; not flown |
 | Dice detection (YOLO, 4 colours) | separate track, `packages/object-detection/`, PR #9 open |
 
@@ -41,6 +41,7 @@ It is written for teammates **and for their AI coding agents**: point your agent
 | [10 Development process](10-development-process.md) | change code: branches, tests, PRs, how to update this wiki |
 | [11 Changelog](11-changelog.md) | want to know what changed recently |
 | [12 Open items and known issues](12-open-items.md) | look for work, or hit something odd |
+| [13 Testing the fast mission](13-fast-mission-testing.md) | test or fly the fast 10 m square: stages, bench steps, results |
 
 ## Rules for agents (and humans)
 

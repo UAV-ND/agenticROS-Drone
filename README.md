@@ -38,7 +38,7 @@ coloured dice) and must return to land fully inside that square.
 | Manual flights without GPS (optical flow) | done 2026-11-13 |
 | VIO fused by the flight controller; LOITER on VIO outdoors | done 2026-11-17 / 18, held ~0.2 m |
 | **Autonomous 3 m square on VIO**, started by an RC switch | **flown: corners within 7 cm, landed 3 cm from takeoff** |
-| Fast autonomous 10 m square at 3 m (~3.8 m/s) | simulator-tested, real flights next |
+| Fast autonomous 10 m square at 3 m (~3.8 m/s) | simulator and props-off bench test passed, first flight (1 m/s) next |
 | Competition mission (search, centre on die, return) | written and unit-tested, not flown yet |
 | Dice detection | trained YOLO models, integration in progress |
 
