@@ -36,6 +36,62 @@ export interface SafetyCheckResult {
   blockReason?: string;
 }
 
+/** Block MAVROS/CV-target access and limit drone agents to mission/status tools. */
+export function checkDroneAgentToolSafety(
+  toolName: string,
+  params: Record<string, unknown>,
+  robot?: { kind?: string } | null,
+): SafetyCheckResult {
+  const rawTarget =
+    toolName === "ros2_publish" || toolName === "ros2_subscribe_once"
+      ? params["topic"]
+      : toolName === "ros2_service_call"
+        ? params["service"]
+        : toolName === "ros2_action_goal"
+          ? params["action"]
+          : toolName === "ros2_param_get" || toolName === "ros2_param_set"
+            ? params["node"]
+            : toolName === "ros2_camera_snapshot" || toolName === "ros2_depth_distance"
+              ? params["topic"]
+              : undefined;
+  const target = typeof rawTarget === "string"
+    ? `/${rawTarget.trim().replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "")}`
+    : undefined;
+
+  if (target && /(?:^|\/)mavros(?:\/|$)/i.test(target)) {
+    return { block: true, blockReason: "AR-2: generic agent access to MAVROS is denied." };
+  }
+  if (toolName === "ros2_publish" && target === "/uav/die/target") {
+    return { block: true, blockReason: "AR-2: agents cannot publish CV detections to /uav/die/target." };
+  }
+
+  if (robot?.kind?.trim().toLowerCase() !== "drone") return PASS;
+
+  if (
+    toolName === "ros2_service_call" &&
+    (target === "/uav/mission/start" || target === "/uav/mission/abort")
+  ) {
+    return PASS;
+  }
+  if (
+    toolName === "ros2_subscribe_once" &&
+    (target === "/uav/mission/state" || target === "/uav/fc_status")
+  ) {
+    return PASS;
+  }
+  if (toolName === "ros2_publish" && target?.endsWith("/cmd_vel")) {
+    return { block: true, blockReason: "AR-2: direct cmd_vel control is disabled for drone agents." };
+  }
+  if (toolName.startsWith("ros2_") || toolName === "run_mission") {
+    return {
+      block: true,
+      blockReason:
+        "AR-2: drone agents may only call /uav/mission/start or /uav/mission/abort and read /uav/mission/state or /uav/fc_status.",
+    };
+  }
+  return PASS;
+}
+
 export interface TwistComponents {
   linear: { x: number; y: number; z: number };
   angular: { x: number; y: number; z: number };

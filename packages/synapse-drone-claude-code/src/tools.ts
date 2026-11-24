@@ -30,10 +30,18 @@ import {
   checkNavTarget,
   DEFAULT_TAKEOFF_ALTITUDE_M,
 } from "./safety.js";
+import {
+  applyRouteChange,
+  buildRouteChangeSummary,
+  createMission3State,
+  validateRouteChange,
+} from "./mission3.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const mission3State = createMission3State("red");
 
 function ok(text: string): ToolResult {
   return { content: [{ type: "text", text }] };
@@ -350,7 +358,8 @@ export async function handleDroneToolCall(
 
     // ------------------------------------------------------------------
     case "drone_search": {
-      const target_color = typeof args.target_color === "string" ? args.target_color : undefined;
+      const explicitTarget = typeof args.target_color === "string" ? args.target_color : undefined;
+      const target_color = explicitTarget ?? mission3State.activeColor ?? undefined;
       const search_radius_m = typeof args.search_radius_m === "number" ? args.search_radius_m : undefined;
 
       if (target_color) {
@@ -358,7 +367,6 @@ export async function handleDroneToolCall(
         if (!check.ok) return err(`Safety check failed: ${check.reason}`);
       }
 
-      // TODO: ICD N3 — update action name + type; C11 world model replaces YOLO find-object (C13)
       const result = await transport.sendActionGoal({
         action: "/drone/search",
         actionType: "uav_msgs/action/Search",
@@ -454,19 +462,30 @@ export async function handleDroneToolCall(
 
     // ------------------------------------------------------------------
     case "drone_change_route": {
-      const new_dice_color = args.new_dice_color as string;
-      const check = checkDiceColor(new_dice_color);
-      if (!check.ok) return err(`Safety check failed: ${check.reason}`);
+      const new_dice_color = String(args.new_dice_color ?? "");
+      const route = validateRouteChange(new_dice_color);
+      if (!route.ok) return err(`Safety check failed: ${route.reason}`);
 
-      // TODO: ICD N3 — confirm service vs. action; this may set a param on the GNC node
+      await transport.cancelActionGoal("/drone/search").catch(() => {});
+      await transport.cancelActionGoal("/drone/navigate").catch(() => {});
+      await transport.cancelActionGoal("/drone/center_and_hover").catch(() => {});
+
+      const previousColor = mission3State.activeColor;
+      const nextState = applyRouteChange(mission3State, route.color, undefined);
+      if (!nextState.ok) return err(`Mission update failed: ${nextState.reason}`);
+      mission3State.activeColor = nextState.state.activeColor;
+      mission3State.phase = nextState.state.phase;
+      mission3State.lastKnownPose = nextState.state.lastKnownPose;
+      mission3State.lastUpdatedAt = nextState.state.lastUpdatedAt;
+
       const result = await transport.callService({
         service: "/drone/change_route",
         type: "uav_msgs/srv/ChangeRoute",
-        args: { new_dice_color },
+        args: { new_dice_color: route.color },
       });
 
       return result.result
-        ? ok(`Target updated to ${new_dice_color} die. Prior approach/search cancelled.`)
+        ? ok(buildRouteChangeSummary(previousColor, route.color))
         : err(`Change route failed: ${JSON.stringify(result.values ?? {})}`);
     }
 

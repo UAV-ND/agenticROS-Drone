@@ -1,6 +1,11 @@
 import type { OpenClawPluginApi } from "../plugin-api.js";
 import type { SynapseConfig } from "@corebrum/core";
-import { checkActionGoalSafety, checkPublishSafety, resolveRobotFromArgs } from "@corebrum/core";
+import {
+  checkActionGoalSafety,
+  checkDroneAgentToolSafety,
+  checkPublishSafety,
+  resolveRobotFromArgs,
+} from "@corebrum/core";
 
 /**
  * Register the before_tool_call safety validation hook.
@@ -13,6 +18,18 @@ export function registerSafetyHook(api: OpenClawPluginApi, config: SynapseConfig
       robot = resolveRobotFromArgs(config, event.params);
     } catch {
       robot = undefined;
+    }
+
+    if (!robot && (event.toolName.startsWith("ros2_") || event.toolName === "run_mission")) {
+      const blockReason = "AR-2: ROS tool call denied because the target robot could not be resolved.";
+      api.logger.warn(`Blocked: ${blockReason}`);
+      return { block: true, blockReason };
+    }
+
+    const agentSafety = checkDroneAgentToolSafety(event.toolName, event.params, robot);
+    if (agentSafety.block) {
+      api.logger.warn(`Blocked: ${agentSafety.blockReason}`);
+      return { block: true, blockReason: agentSafety.blockReason };
     }
 
     if (event.toolName === "ros2_publish") {
